@@ -5,6 +5,7 @@ import {
   updateSearchStatus,
   updateSearchFingerprint,
   updateSearchListingData,
+  updateSearchProgressDetail,
   upsertCandidate,
   getDb,
 } from "./db";
@@ -105,8 +106,16 @@ export async function runSearchPipeline(
       primaryZone,
       fingerprint,
       (scanned, total, suburb) => {
-        const pct = 40 + Math.round((scanned / total) * 35);
-        emitProgress("scanning_satellite", `Scanning ${suburb}...`, `Tile ${scanned} of ${total}`, pct);
+        const pct = Math.round((scanned / total) * 100);
+        updateSearchProgressDetail(searchId, JSON.stringify({
+          stage: "scanning_satellite",
+          suburb,
+          scanned,
+          total,
+          percentage: pct,
+          message: `Scanning ${suburb}: tile ${scanned} of ${total} (${pct}%)`
+        }));
+        emitProgress("scanning_satellite", `Scanning ${suburb}...`, `Tile ${scanned} of ${total}`, 40 + Math.round((scanned / total) * 35));
       }
     );
 

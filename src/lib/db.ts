@@ -45,6 +45,7 @@ function migrate(db: Database.Database) {
       listing_data TEXT DEFAULT '{}',
       fingerprint TEXT DEFAULT NULL,
       status TEXT NOT NULL DEFAULT 'extracting_listing',
+      progress_detail TEXT DEFAULT NULL,
       error_message TEXT DEFAULT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -97,6 +98,11 @@ export function getSearch(id: string) {
     .all(id);
 
   return { ...search, candidates };
+}
+
+export function updateSearchProgressDetail(id: string, detail: string) {
+  const db = getDb();
+  db.prepare(`UPDATE searches SET progress_detail = ? WHERE id = ?`).run(detail, id);
 }
 
 export function updateSearchStatus(

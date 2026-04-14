@@ -131,7 +131,8 @@ export default function SearchPage() {
       {isInProgress && (
         <ProgressTracker
           status={data.status}
-          message="Analysing the listing and searching for a match. This may take up to a minute."
+          message="Analysing the listing and searching for a match. This may take a few minutes."
+          progressDetail={(data as any).progressDetail}
         />
       )}
 

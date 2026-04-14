@@ -56,12 +56,22 @@ function StepIcon({ state }: { state: StepState }) {
   );
 }
 
+interface ProgressDetail {
+  stage: string;
+  suburb: string;
+  scanned: number;
+  total: number;
+  percentage: number;
+  message: string;
+}
+
 interface Props {
   status: SearchStatus;
   message?: string;
+  progressDetail?: ProgressDetail | null;
 }
 
-export default function ProgressTracker({ status, message }: Props) {
+export default function ProgressTracker({ status, message, progressDetail }: Props) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-6">
       <h2 className="text-base font-semibold text-gray-900 mb-5">Search progress</h2>
@@ -71,28 +81,46 @@ export default function ProgressTracker({ status, message }: Props) {
       <ol className="space-y-3">
         {STEPS.map((step, i) => {
           const state = stepState(step.key, status);
+          const isScanning = step.key === "scanning_satellite" && state === "active" && progressDetail;
           return (
-            <li key={step.key} className="flex items-center gap-3">
-              <StepIcon state={state} />
-              <span
-                className={`text-sm ${
-                  state === "active"
-                    ? "font-semibold text-blue-700"
-                    : state === "done"
-                    ? "text-gray-700"
-                    : state === "failed"
-                    ? "font-semibold text-red-600"
-                    : "text-gray-400"
-                }`}
-              >
-                {step.label}
-              </span>
-              {i < STEPS.length - 1 && (
-                <div
-                  className={`ml-3 h-0.5 flex-1 rounded ${
-                    state === "done" ? "bg-green-400" : "bg-gray-200"
+            <li key={step.key}>
+              <div className="flex items-center gap-3">
+                <StepIcon state={state} />
+                <span
+                  className={`text-sm ${
+                    state === "active"
+                      ? "font-semibold text-blue-700"
+                      : state === "done"
+                      ? "text-gray-700"
+                      : state === "failed"
+                      ? "font-semibold text-red-600"
+                      : "text-gray-400"
                   }`}
-                />
+                >
+                  {step.label}
+                </span>
+                {i < STEPS.length - 1 && (
+                  <div
+                    className={`ml-3 h-0.5 flex-1 rounded ${
+                      state === "done" ? "bg-green-400" : "bg-gray-200"
+                    }`}
+                  />
+                )}
+              </div>
+              {/* Progress bar for satellite scanning */}
+              {isScanning && (
+                <div className="ml-10 mt-2">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Scanning {progressDetail.suburb}</span>
+                    <span>{progressDetail.scanned} / {progressDetail.total} tiles ({progressDetail.percentage}%)</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div
+                      className="bg-blue-700 h-2.5 rounded-full transition-all duration-300"
+                      style={{ width: `${progressDetail.percentage}%` }}
+                    />
+                  </div>
+                </div>
               )}
             </li>
           );

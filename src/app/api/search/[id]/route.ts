@@ -19,6 +19,8 @@ export async function GET(
     feature_matches: JSON.parse(c.feature_matches || "[]"),
   }));
 
+  const progressDetail = search.progress_detail ? JSON.parse(search.progress_detail) : null;
+
   return NextResponse.json({
     id: search.id,
     property24Url: search.property24_url,
@@ -27,6 +29,7 @@ export async function GET(
     fingerprint,
     candidates,
     status: search.status,
+    progressDetail,
     errorMessage: search.error_message,
     createdAt: search.created_at,
   });
