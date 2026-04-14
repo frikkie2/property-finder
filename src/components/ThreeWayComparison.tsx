@@ -47,7 +47,8 @@ function ImagePanel({
 
 export default function ThreeWayComparison({ candidate, listing, onConfirm, onReject }: Props) {
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${candidate.latitude},${candidate.longitude}`;
-  const firstPhoto = listing.photoUrls?.[0] ?? null;
+  const rawPhoto = listing.photoUrls?.[0] ?? null;
+  const firstPhoto = rawPhoto ? `/api/proxy-image?url=${encodeURIComponent(rawPhoto)}` : null;
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-5 flex flex-col gap-6">
@@ -56,7 +57,7 @@ export default function ThreeWayComparison({ candidate, listing, onConfirm, onRe
         <div>
           <h2 className="text-base font-semibold text-gray-900">{candidate.address}</h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Confidence: {Math.round(candidate.confidenceScore * 100)}%
+            Confidence: {candidate.confidenceScore}%
           </p>
         </div>
         <span

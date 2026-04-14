@@ -35,37 +35,67 @@ export function generateTileGrid(
 export function buildSatelliteScanPrompt(fingerprint: PropertyFingerprint): string {
   const features: string[] = [];
 
-  if (fingerprint.roofColour) features.push(`${fingerprint.roofColour} roof`);
-  if (fingerprint.roofType !== "unknown") features.push(`${fingerprint.roofType} roof type`);
-  if (fingerprint.poolShape !== "unknown" && fingerprint.poolShape !== "none") {
-    features.push(`${fingerprint.poolShape}-shaped swimming pool`);
-  }
-  if (fingerprint.drivewayType !== "unknown" && fingerprint.drivewayType !== "none") {
-    features.push(`${fingerprint.drivewayType} driveway`);
-  }
-  if (fingerprint.solarPanels) features.push("solar panels on roof");
-  if (fingerprint.garageCount > 0) features.push(`${fingerprint.garageCount}-car garage structure`);
+  // Roof — most visible from satellite
+  if (fingerprint.roofColour) features.push(`ROOF COLOUR: ${fingerprint.roofColour}`);
+  if (fingerprint.roofType !== "unknown") features.push(`ROOF TYPE: ${fingerprint.roofType}`);
+  const roofOutline = (fingerprint as any).roofOutline;
+  if (roofOutline) features.push(`BUILDING SHAPE FROM ABOVE: ${roofOutline}`);
 
+  // Pool — very visible from satellite
+  if (fingerprint.poolShape !== "unknown" && fingerprint.poolShape !== "none") {
+    const poolPos = (fingerprint as any).poolPosition;
+    features.push(`SWIMMING POOL: ${fingerprint.poolShape}-shaped${poolPos && poolPos !== "none" ? `, positioned ${poolPos} of house` : ""}`);
+  }
+
+  // Driveway — visible from satellite
+  if (fingerprint.drivewayType !== "unknown" && fingerprint.drivewayType !== "none") {
+    features.push(`DRIVEWAY: ${fingerprint.drivewayType} driveway (look for paved area)`);
+  }
+
+  // Boundary walls/fences — visible as lines from satellite
+  if (fingerprint.fenceType !== "unknown" && fingerprint.fenceType !== "none") {
+    features.push(`BOUNDARY: ${fingerprint.fenceType} fence/wall (look for boundary lines)`);
+  }
+
+  // Garage position
+  const garagePos = (fingerprint as any).garagePosition;
+  if (fingerprint.garageCount > 0) {
+    features.push(`GARAGE: ${fingerprint.garageCount}-car${garagePos && garagePos !== "unknown" ? `, positioned ${garagePos}` : ""}`);
+  }
+
+  // Solar panels — visible on roof
+  if (fingerprint.solarPanels) features.push(`SOLAR PANELS visible on roof`);
+
+  // Trees and garden features
   for (const feat of fingerprint.notableFeatures) {
-    features.push(feat);
+    features.push(`FEATURE: ${feat}`);
   }
 
   const featureList = features.map((f) => `- ${f}`).join("\n");
 
-  return `You are examining a satellite/aerial image of residential properties. Look for ANY property in this image that matches these features:
+  return `You are examining a satellite/aerial image of a residential area. Search for a SPECIFIC property that matches ALL of these features visible from above:
 
 ${featureList}
 
-For each property that could be a match, estimate its position within the image (as approximate latitude/longitude offset from center) and list which features match.
+KEY IDENTIFICATION STRATEGY:
+1. First look for the ROOF COLOUR and SHAPE — this is the most distinctive feature from satellite
+2. Then check for a SWIMMING POOL of the right shape in the right position
+3. Then check DRIVEWAY pattern and BOUNDARY WALLS
+4. Then look for TREES and other external features
+5. A property must match MOST features to be a candidate — don't flag weak matches
 
-Respond with ONLY valid JSON (no markdown, no explanation):
+Be STRICT — only flag properties where at least 3 major features match. False positives waste time.
+
+For each matching property, estimate its position as a lat/lng offset from the image center.
+
+Respond with ONLY valid JSON (no markdown):
 
 {
   "hasMatch": true/false,
   "matches": [
     {
-      "estimatedLatOffset": number (positive = north of center, negative = south),
-      "estimatedLngOffset": number (positive = east of center, negative = west),
+      "estimatedLatOffset": number,
+      "estimatedLngOffset": number,
       "matchingFeatures": ["feature1", "feature2"],
       "confidence": "high" | "medium" | "low"
     }
@@ -79,10 +109,10 @@ export async function scanTile(
   tile: TileBounds,
   fingerprint: PropertyFingerprint
 ): Promise<SatelliteTileResult> {
-  const { base64 } = await fetchSatelliteImage(tile.centerLat, tile.centerLng, 19);
+  const { base64, mediaType } = await fetchSatelliteImage(tile.centerLat, tile.centerLng, 19);
   const prompt = buildSatelliteScanPrompt(fingerprint);
 
-  const response = await analyseBase64ImageWithPrompt(base64, "image/jpeg", prompt);
+  const response = await analyseBase64ImageWithPrompt(base64, mediaType, prompt);
 
   let parsed;
   try {

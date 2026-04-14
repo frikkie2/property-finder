@@ -18,9 +18,10 @@ type ProgressCallback = (progress: SearchProgress) => void;
 
 export async function runSearchPipeline(
   property24Url: string,
+  existingSearchId?: string,
   onProgress?: ProgressCallback
 ): Promise<SearchResult> {
-  const searchId = createSearch(property24Url, "", {});
+  const searchId = existingSearchId || createSearch(property24Url, "", {});
 
   function emitProgress(
     status: SearchProgress["status"],
@@ -36,8 +37,10 @@ export async function runSearchPipeline(
 
   try {
     // Step 1: Extract listing
+    console.log("[PIPELINE] Step 1: Extracting listing from", property24Url);
     emitProgress("extracting_listing", "Fetching listing from Property24...", null, 5);
     const listing = await extractListingFromUrl(property24Url);
+    console.log("[PIPELINE] Listing extracted:", listing.listedSuburb, listing.photoUrls.length, "photos");
 
     updateSearchListingData(searchId, JSON.stringify(listing));
     getDb()
@@ -58,7 +61,7 @@ export async function runSearchPipeline(
       throw new Error("No photos found in listing. Try uploading screenshots manually.");
     }
 
-    const fingerprint = await extractFeaturesFromPhotos(listing.photoUrls);
+    const fingerprint = await extractFeaturesFromPhotos(listing.photoUrls, listing.description);
     updateSearchFingerprint(searchId, JSON.stringify(fingerprint));
 
     const featureSummary = [
@@ -155,6 +158,7 @@ export async function runSearchPipeline(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("[PIPELINE] FAILED:", message, error);
     updateSearchStatus(searchId, "failed", message);
     emitProgress("failed", "Search failed", message, 0);
 

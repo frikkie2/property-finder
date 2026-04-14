@@ -33,13 +33,22 @@ export function parseListingHtml(html: string, url: string): ListingData {
   const agentName = $(".p24_agentName").first().text().trim() || null;
   const agencyName = $(".p24_agencyName").first().text().trim() || null;
 
-  // Photos — collect all unique image URLs
+  // Photos — collect all unique image URLs (must be absolute HTTP URLs of actual photos)
   const photoUrls: string[] = [];
   const seen = new Set<string>();
 
   $("img").each((_, el) => {
-    const src = $(el).attr("src") || $(el).attr("data-src") || "";
-    if (src && (src.includes("prop24") || src.includes("property24")) && !seen.has(src)) {
+    let src = $(el).attr("src") || $(el).attr("data-src") || "";
+
+    // Skip empty, relative URLs, SVGs, logos, icons
+    if (!src) return;
+    if (!src.startsWith("http")) return;
+    if (src.endsWith(".svg")) return;
+    if (src.includes("/Logos/")) return;
+    if (src.includes("/icons/")) return;
+
+    // Only keep actual property listing images
+    if ((src.includes("prop24") || src.includes("property24") || src.includes("images")) && !seen.has(src)) {
       seen.add(src);
       photoUrls.push(src);
     }

@@ -1,23 +1,44 @@
 import type { PropertyFingerprint } from "./types";
 import { analyseMultipleImagesWithPrompt } from "./claude";
 
-export function buildFeatureExtractionPrompt(): string {
-  return `You are analysing property listing photos to build a "property fingerprint" for identification purposes. Examine ALL photos carefully and extract every identifying feature you can find.
+export function buildFeatureExtractionPrompt(listingDescription: string): string {
+  const descriptionSection = listingDescription
+    ? `\n\nLISTING DESCRIPTION (extract any useful features from this text):\n"${listingDescription}"\n`
+    : "";
 
-IMPORTANT: Look for "quick wins" first — these can identify the property instantly:
+  return `You are analysing property listing photos to build a "property fingerprint" for identification from satellite and street view imagery.
+${descriptionSection}
+STEP 1 - CLASSIFY EACH PHOTO: First, classify each photo as EXTERIOR (front of house, garden, pool, street view, aerial) or INTERIOR (kitchen, bedroom, bathroom, lounge). Focus your analysis on EXTERIOR photos — they are critical for matching. Interior photos only help estimate the house size/layout.
+
+STEP 2 - QUICK WINS: Look for instant-identification clues:
 - A visible house number on a wall, gate, or letterbox
 - A street name sign visible in any photo
 - A recognisable landmark (church, school, park, shopping centre)
 - A real estate "Sold" or "For Sale" board from a previous sale
 - A clearly identifiable neighbouring property
 
-Then extract all structural and visual features:
+STEP 3 - EXTERIOR FEATURES (from exterior photos):
+- Exterior finish (face_brick / plaster / painted / mixed / unknown) and colour
+- Roof type (tiles / ibr_sheeting / thatch / concrete / unknown) and colour
+- Number of storeys
+- Gate/fence type (palisade / wall / precast / face_brick / none / unknown)
+- Number of garage doors and type
+- Swimming pool shape (kidney / rectangle / freeform / round / none / unknown)
+- Driveway type (circular / straight / double / none / unknown)
+- Solar panels on roof (true/false)
+- Notable external features (lapa, braai area, wendy house, water feature, etc)
+- Any visible landmarks in background
+- Any distinctive features of neighbouring properties
 
-EXTERIOR: exterior finish (face_brick / plaster / painted / mixed / unknown), colour, roof type (tiles / ibr_sheeting / thatch / concrete / unknown), roof colour, number of storeys, gate/fence type (palisade / wall / precast / face_brick / none / unknown), number of garage doors.
+STEP 4 - ROOF/BUILDING OUTLINE (critical for satellite matching):
+Estimate the approximate shape of the building as seen from above (bird's eye view). Describe:
+- Overall roof shape: L-shaped, T-shaped, U-shaped, rectangular, square, irregular
+- Approximate proportions (e.g., "long narrow rectangle with a wing to the right")
+- Position of garage relative to main house
+- Position of pool relative to house
+- Any outbuildings (wendy house, lapa) and their position
 
-PROPERTY: swimming pool shape (kidney / rectangle / freeform / round / none / unknown), driveway type (circular / straight / double / none / unknown), solar panels (true/false), notable features (lapa, braai area, wendy house, water feature, etc), any visible landmarks in background, any distinctive features of neighbouring properties.
-
-Respond with ONLY valid JSON in this exact structure (no markdown, no explanation):
+Respond with ONLY valid JSON (no markdown, no explanation):
 
 {
   "houseNumber": null or "string",
@@ -35,7 +56,11 @@ Respond with ONLY valid JSON in this exact structure (no markdown, no explanatio
   "notableFeatures": ["string"],
   "landmarks": ["string"],
   "neighbourFeatures": ["string"],
-  "quickWins": [{"type": "house_number|street_sign|landmark|sold_board|neighbour_id", "value": "string", "confidence": "high|medium|low"}]
+  "quickWins": [{"type": "house_number|street_sign|landmark|sold_board|neighbour_id", "value": "string", "confidence": "high|medium|low"}],
+  "roofOutline": "description of building shape from above",
+  "garagePosition": "left|right|center|detached|unknown",
+  "poolPosition": "back-left|back-right|back-center|front|side|none",
+  "photoClassification": {"exterior": number, "interior": number}
 }`;
 }
 
@@ -69,9 +94,10 @@ export function parseFeatureResponse(responseText: string): PropertyFingerprint 
 }
 
 export async function extractFeaturesFromPhotos(
-  photoUrls: string[]
+  photoUrls: string[],
+  listingDescription: string = ""
 ): Promise<PropertyFingerprint> {
-  const prompt = buildFeatureExtractionPrompt();
+  const prompt = buildFeatureExtractionPrompt(listingDescription);
 
   // Send up to 20 photos at once (Claude can handle multiple images)
   const batch = photoUrls.slice(0, 20);

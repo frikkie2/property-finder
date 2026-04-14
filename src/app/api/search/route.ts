@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runSearchPipeline } from "@/lib/search-pipeline";
-import { getSearchHistory } from "@/lib/db";
+import { getSearchHistory, createSearch } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -13,13 +13,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Run pipeline (this blocks until complete for the POC)
-  const result = await runSearchPipeline(url);
+  // Create search record immediately so we have an ID
+  const searchId = createSearch(url, "", {});
 
+  // Run pipeline in the background — don't await
+  console.log("[SEARCH] Starting pipeline for:", url, "searchId:", searchId);
+  runSearchPipeline(url, searchId).then((result) => {
+    console.log("[SEARCH] Pipeline complete:", result.status, "candidates:", result.candidates.length);
+  }).catch((err) => {
+    console.error("[SEARCH] Pipeline error:", err);
+  });
+
+  // Return immediately so the UI can redirect to the progress page
   return NextResponse.json({
-    id: result.id,
-    status: result.status,
-    candidates: result.candidates.length,
+    id: searchId,
+    status: "extracting_listing",
   });
 }
 

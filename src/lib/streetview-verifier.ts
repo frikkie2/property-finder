@@ -104,7 +104,7 @@ export async function verifyCandidate(
 
   const bestImage = streetViewImages[0];
   const prompt = buildStreetViewComparisonPrompt(fingerprint);
-  const response = await analyseBase64ImageWithPrompt(bestImage.base64, "image/jpeg", prompt);
+  const response = await analyseBase64ImageWithPrompt(bestImage.base64, bestImage.mediaType, prompt);
 
   const verification = parseVerificationResponse(response);
 
@@ -120,8 +120,8 @@ export async function verifyCandidate(
     streetviewMatchScore: verification.overallScore,
     featureMatches: verification.featureMatches,
     aiExplanation: verification.explanation,
-    streetviewImageUrl: null,
-    satelliteImageUrl: null,
+    streetviewImageUrl: `/api/images/${bestImage.key}`,
+    satelliteImageUrl: `/api/images/${satellite.key}`,
     status: "pending",
     confirmedAt: null,
   };

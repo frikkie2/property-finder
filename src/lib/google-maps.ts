@@ -8,7 +8,7 @@ function ensureCacheDir() {
   if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
 
-function cacheKey(prefix: string, params: string): string {
+export function cacheKey(prefix: string, params: string): string {
   const hash = crypto.createHash("md5").update(params).digest("hex");
   return `${prefix}-${hash}`;
 }
@@ -24,16 +24,26 @@ function setCache(key: string, data: Buffer) {
   fs.writeFileSync(path.join(CACHE_DIR, `${key}.jpg`), data);
 }
 
+type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
+function detectMediaType(buffer: Buffer): ImageMediaType {
+  if (buffer[0] === 0x89 && buffer[1] === 0x50) return "image/png";
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8) return "image/jpeg";
+  if (buffer[0] === 0x47 && buffer[1] === 0x49) return "image/gif";
+  if (buffer[0] === 0x52 && buffer[1] === 0x49) return "image/webp";
+  return "image/png"; // default to png for Google Maps
+}
+
 export async function fetchSatelliteImage(
   lat: number,
   lng: number,
   zoom: number = 19,
   size: string = "640x640"
-): Promise<{ imageBuffer: Buffer; base64: string }> {
+): Promise<{ imageBuffer: Buffer; base64: string; mediaType: ImageMediaType; key: string }> {
   const key = cacheKey("sat", `${lat},${lng},${zoom},${size}`);
   const cached = getCached(key);
   if (cached) {
-    return { imageBuffer: cached, base64: cached.toString("base64") };
+    return { imageBuffer: cached, base64: cached.toString("base64"), mediaType: detectMediaType(cached), key };
   }
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
@@ -50,7 +60,7 @@ export async function fetchSatelliteImage(
   const buffer = Buffer.from(await response.arrayBuffer());
   setCache(key, buffer);
 
-  return { imageBuffer: buffer, base64: buffer.toString("base64") };
+  return { imageBuffer: buffer, base64: buffer.toString("base64"), mediaType: detectMediaType(buffer), key };
 }
 
 export async function fetchStreetViewImage(
@@ -58,11 +68,11 @@ export async function fetchStreetViewImage(
   lng: number,
   heading: number = 0,
   size: string = "640x480"
-): Promise<{ imageBuffer: Buffer; base64: string } | null> {
+): Promise<{ imageBuffer: Buffer; base64: string; mediaType: ImageMediaType; key: string } | null> {
   const key = cacheKey("sv", `${lat},${lng},${heading},${size}`);
   const cached = getCached(key);
   if (cached) {
-    return { imageBuffer: cached, base64: cached.toString("base64") };
+    return { imageBuffer: cached, base64: cached.toString("base64"), mediaType: detectMediaType(cached), key };
   }
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
@@ -88,20 +98,20 @@ export async function fetchStreetViewImage(
   const buffer = Buffer.from(await response.arrayBuffer());
   setCache(key, buffer);
 
-  return { imageBuffer: buffer, base64: buffer.toString("base64") };
+  return { imageBuffer: buffer, base64: buffer.toString("base64"), mediaType: detectMediaType(buffer), key };
 }
 
 export async function fetchStreetViewMultipleAngles(
   lat: number,
   lng: number
-): Promise<{ heading: number; base64: string }[]> {
+): Promise<{ heading: number; base64: string; mediaType: ImageMediaType; key: string }[]> {
   const headings = [0, 90, 180, 270];
-  const results: { heading: number; base64: string }[] = [];
+  const results: { heading: number; base64: string; mediaType: ImageMediaType; key: string }[] = [];
 
   for (const heading of headings) {
     const image = await fetchStreetViewImage(lat, lng, heading);
     if (image) {
-      results.push({ heading, base64: image.base64 });
+      results.push({ heading, base64: image.base64, mediaType: image.mediaType, key: image.key });
     }
   }
 

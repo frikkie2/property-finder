@@ -37,7 +37,7 @@ export default function PhotoStrip({ photoUrls, onSelect }: Props) {
           aria-label={`Photo ${i + 1}`}
         >
           <Image
-            src={url}
+            src={`/api/proxy-image?url=${encodeURIComponent(url)}`}
             alt={`Listing photo ${i + 1}`}
             fill
             sizes="96px"

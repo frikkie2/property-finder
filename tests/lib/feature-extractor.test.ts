@@ -10,12 +10,20 @@ const sampleFingerprint = JSON.parse(
 describe("feature extractor", () => {
   describe("buildFeatureExtractionPrompt", () => {
     it("returns a non-empty prompt string", () => {
-      const prompt = buildFeatureExtractionPrompt();
+      const prompt = buildFeatureExtractionPrompt("");
       expect(prompt).toBeTruthy();
       expect(prompt).toContain("house number");
       expect(prompt).toContain("roof");
-      expect(prompt).toContain("swimming pool");
+      expect(prompt).toContain("Swimming pool");
       expect(prompt).toContain("JSON");
+      expect(prompt).toContain("EXTERIOR");
+      expect(prompt).toContain("INTERIOR");
+      expect(prompt).toContain("roofOutline");
+    });
+
+    it("includes listing description in prompt when provided", () => {
+      const prompt = buildFeatureExtractionPrompt("Face brick home with large pool and lapa");
+      expect(prompt).toContain("Face brick home with large pool and lapa");
     });
   });
 
