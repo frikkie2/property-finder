@@ -158,10 +158,24 @@ export default function SearchPage() {
             </section>
           )}
 
-          {/* No candidates */}
+          {/* No candidates — offer to expand search */}
           {activeCandidates.length === 0 && (
-            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-5 text-sm text-yellow-800">
-              No matching candidates were found for this listing.
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-5">
+              <p className="text-sm text-yellow-800 font-semibold">No matches found in {data.listedSuburb}</p>
+              <p className="text-sm text-yellow-700 mt-1">The property might be listed under an adjacent suburb.</p>
+              <button
+                onClick={async () => {
+                  const res = await fetch(`/api/search/${id}/expand`, { method: "POST" });
+                  if (res.ok) {
+                    const result = await res.json();
+                    alert(`Expanding search to: ${result.suburbs.join(", ")}`);
+                    fetchData();
+                  }
+                }}
+                className="mt-3 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+              >
+                Expand search to adjacent suburbs
+              </button>
             </div>
           )}
 

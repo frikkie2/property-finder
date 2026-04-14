@@ -16,17 +16,19 @@ export const SUBURBS: SuburbBounds[] = [
   { name: "Silverton", north: -25.720, south: -25.745, east: 28.280, west: 28.255 },
 ];
 
+// Adjacency based on actual suburb boundary map
+// Search strategy: start with listed suburb, then expand up/down/left/right one suburb
 export const ADJACENCY: Record<string, string[]> = {
-  "Moot": ["Queenswood", "Capital Park", "Villieria"],
-  "Queenswood": ["Moot", "Kilner Park", "Colbyn", "Rietondale", "Villieria", "Moregloed"],
-  "Kilner Park": ["Queenswood", "Weavind Park", "Moregloed"],
-  "Weavind Park": ["Kilner Park", "Capital Park"],
+  "Moot": ["Capital Park", "Villieria", "Rietondale"],
+  "Queenswood": ["Rietondale", "Villieria", "Colbyn", "Moregloed"],
+  "Kilner Park": ["Villieria", "Moregloed", "Weavind Park"],
+  "Weavind Park": ["Kilner Park", "Capital Park", "Villieria"],
   "Capital Park": ["Moot", "Weavind Park", "Villieria", "Rietondale"],
-  "Colbyn": ["Queenswood", "Waverley", "Rietondale"],
-  "Moregloed": ["Queenswood", "Kilner Park", "Meyerspark"],
-  "Waverley": ["Colbyn", "Meyerspark", "Queenswood"],
-  "Villieria": ["Moot", "Queenswood", "Capital Park"],
-  "Rietondale": ["Queenswood", "Colbyn", "Capital Park"],
-  "Meyerspark": ["Moregloed", "Waverley", "Silverton"],
+  "Colbyn": ["Rietondale", "Queenswood"],
+  "Moregloed": ["Villieria", "Queenswood", "Kilner Park", "Waverley"],
+  "Waverley": ["Moregloed", "Villieria", "Meyerspark"],
+  "Villieria": ["Capital Park", "Queenswood", "Moregloed", "Waverley", "Kilner Park", "Weavind Park", "Moot"],
+  "Rietondale": ["Capital Park", "Queenswood", "Colbyn", "Moot"],
+  "Meyerspark": ["Waverley", "Silverton"],
   "Silverton": ["Meyerspark"],
 };

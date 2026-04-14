@@ -93,57 +93,25 @@ export async function runSearchPipeline(
       }
     }
 
-    // Step 3: Narrow suburbs
-    emitProgress("narrowing_suburbs", "Determining search area...", null, 30);
+    // Step 3: Narrow suburbs — only search the listed suburb
+    emitProgress("narrowing_suburbs", `Searching ${listing.listedSuburb} only`, null, 35);
     const allZones = narrowSuburbs(listing, fingerprint);
-
-    // Start with just the listed suburb, expand only if no good matches found
     const primaryZone = allZones.filter((z) => z.priority === 1);
-    const adjacentZones = allZones.filter((z) => z.priority === 2);
 
-    emitProgress("narrowing_suburbs", `Starting with ${listing.listedSuburb}`, `Will expand to adjacent suburbs if needed`, 35);
-
-    // Step 4: Satellite scan — start narrow, expand if needed
+    // Step 4: Satellite scan — listed suburb only
     emitProgress("scanning_satellite", `Scanning ${listing.listedSuburb}...`, null, 40);
 
-    let satelliteMatches = await scanSuburbZones(
+    const satelliteMatches = await scanSuburbZones(
       primaryZone,
       fingerprint,
       (scanned, total, suburb) => {
-        const pct = 40 + Math.round((scanned / total) * 25);
+        const pct = 40 + Math.round((scanned / total) * 35);
         emitProgress("scanning_satellite", `Scanning ${suburb}...`, `Tile ${scanned} of ${total}`, pct);
       }
     );
 
-    console.log(`[PIPELINE] Primary suburb scan: ${satelliteMatches.length} matches in ${listing.listedSuburb}`);
-
-    // If no good matches in the listed suburb, expand to adjacent suburbs one at a time
-    if (satelliteMatches.length === 0 && adjacentZones.length > 0) {
-      emitProgress("scanning_satellite", `No matches in ${listing.listedSuburb}, expanding search...`, null, 65);
-
-      for (const zone of adjacentZones) {
-        emitProgress("scanning_satellite", `Scanning ${zone.suburb.name}...`, null, 68);
-
-        const additionalMatches = await scanSuburbZones(
-          [zone],
-          fingerprint,
-          (scanned, total, suburb) => {
-            emitProgress("scanning_satellite", `Scanning ${suburb}...`, `Tile ${scanned} of ${total}`, 68);
-          }
-        );
-
-        satelliteMatches.push(...additionalMatches);
-        console.log(`[PIPELINE] Adjacent suburb ${zone.suburb.name}: ${additionalMatches.length} matches`);
-
-        // Stop expanding once we have some candidates
-        if (satelliteMatches.length >= 3) {
-          console.log(`[PIPELINE] Found ${satelliteMatches.length} candidates, stopping expansion`);
-          break;
-        }
-      }
-    }
-
-    emitProgress("scanning_satellite", `Found ${satelliteMatches.length} potential matches`, null, 75);
+    console.log(`[PIPELINE] Suburb scan complete: ${satelliteMatches.length} matches in ${listing.listedSuburb}`);
+    emitProgress("scanning_satellite", `Found ${satelliteMatches.length} potential matches in ${listing.listedSuburb}`, null, 75);
 
     // Step 5: Street View verification
     emitProgress("verifying_streetview", "Verifying candidates via Street View...", null, 78);
