@@ -1,0 +1,18 @@
+{
+  "houseNumber": null,
+  "streetClue": null,
+  "exteriorFinish": "face_brick",
+  "exteriorColour": "red-brown",
+  "roofType": "tiles",
+  "roofColour": "terracotta",
+  "storeys": 1,
+  "fenceType": "palisade",
+  "garageCount": 2,
+  "poolShape": "kidney",
+  "drivewayType": "straight",
+  "solarPanels": false,
+  "notableFeatures": ["large lapa", "established garden", "wendy house"],
+  "landmarks": [],
+  "neighbourFeatures": ["green corrugated roof next door"],
+  "quickWins": []
+}
