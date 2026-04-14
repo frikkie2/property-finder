@@ -85,14 +85,16 @@ function parsePrice(text: string): number | null {
   return isNaN(num) ? null : num;
 }
 
-function extractFeatureCount($: cheerio.CheerioAPI, title: string): number | null {
+type CheerioRoot = ReturnType<typeof cheerio.load>;
+
+function extractFeatureCount($: CheerioRoot, title: string): number | null {
   const el = $(`.p24_featureDetail[title="${title}"]`).first();
   if (!el.length) return null;
   const num = parseInt(el.text().trim(), 10);
   return isNaN(num) ? null : num;
 }
 
-function extractSize($: cheerio.CheerioAPI, label: string): number | null {
+function extractSize($: CheerioRoot, label: string): number | null {
   let value: string | null = null;
 
   $(".p24_propertyOverviewKey").each((_, el) => {
