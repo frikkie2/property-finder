@@ -36,6 +36,11 @@ export function closeDb(): void {
   }
 }
 
+function columnExists(db: Database.Database, table: string, column: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  return rows.some((r) => r.name === column);
+}
+
 function migrate(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS searches (
@@ -71,6 +76,11 @@ function migrate(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_candidates_search_id ON candidates(search_id);
     CREATE INDEX IF NOT EXISTS idx_searches_created_at ON searches(created_at);
   `);
+
+  // Auto-migrate: add columns that may not exist in older databases
+  if (!columnExists(db, "searches", "progress_detail")) {
+    db.exec(`ALTER TABLE searches ADD COLUMN progress_detail TEXT DEFAULT NULL`);
+  }
 }
 
 export function createSearch(
