@@ -81,6 +81,12 @@ function migrate(db: Database.Database) {
   if (!columnExists(db, "searches", "progress_detail")) {
     db.exec(`ALTER TABLE searches ADD COLUMN progress_detail TEXT DEFAULT NULL`);
   }
+  if (!columnExists(db, "searches", "pipeline_log")) {
+    db.exec(`ALTER TABLE searches ADD COLUMN pipeline_log TEXT DEFAULT '[]'`);
+  }
+  if (!columnExists(db, "searches", "buildings_found")) {
+    db.exec(`ALTER TABLE searches ADD COLUMN buildings_found TEXT DEFAULT '[]'`);
+  }
 }
 
 export function createSearch(
@@ -113,6 +119,19 @@ export function getSearch(id: string) {
 export function updateSearchProgressDetail(id: string, detail: string) {
   const db = getDb();
   db.prepare(`UPDATE searches SET progress_detail = ? WHERE id = ?`).run(detail, id);
+}
+
+export function appendPipelineLog(id: string, event: Record<string, unknown>) {
+  const db = getDb();
+  const row = db.prepare(`SELECT pipeline_log FROM searches WHERE id = ?`).get(id) as { pipeline_log: string } | undefined;
+  const existing = row?.pipeline_log ? JSON.parse(row.pipeline_log) : [];
+  existing.push({ ...event, timestamp: new Date().toISOString() });
+  db.prepare(`UPDATE searches SET pipeline_log = ? WHERE id = ?`).run(JSON.stringify(existing), id);
+}
+
+export function saveBuildingsFound(id: string, buildings: unknown[]) {
+  const db = getDb();
+  db.prepare(`UPDATE searches SET buildings_found = ? WHERE id = ?`).run(JSON.stringify(buildings), id);
 }
 
 export function updateSearchStatus(

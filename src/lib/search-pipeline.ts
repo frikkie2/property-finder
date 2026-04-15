@@ -6,6 +6,8 @@ import {
   updateSearchFingerprint,
   updateSearchListingData,
   updateSearchProgressDetail,
+  appendPipelineLog,
+  saveBuildingsFound,
   upsertCandidate,
   getDb,
 } from "./db";
@@ -106,9 +108,10 @@ export async function runSearchPipeline(
     if (primaryZone.length > 0) {
       emitProgress("scanning_satellite", `Querying Google Solar API for ${primaryZone[0].suburb.name}...`, null, 40);
       console.log("[PIPELINE] Trying Solar API first...");
+      appendPipelineLog(searchId, { stage: "solar_start", suburb: primaryZone[0].suburb.name });
 
       try {
-        satelliteMatches = await scanSuburbWithSolarApi(
+        const solarResult = await scanSuburbWithSolarApi(
           primaryZone[0].suburb,
           fingerprint,
           (sampled, total, found) => {
@@ -125,8 +128,39 @@ export async function runSearchPipeline(
           }
         );
 
-        console.log(`[PIPELINE] Solar API found ${satelliteMatches.length} candidates`);
+        satelliteMatches = solarResult.matches;
+
+        // Save all scored buildings (including low scores) for debug display
+        const buildingsForDebug = solarResult.allScored.map((sc) => ({
+          name: sc.building.name,
+          center: sc.building.center,
+          boundingBox: sc.building.boundingBox,
+          roofSegments: sc.building.solarPotential?.roofSegmentStats?.map((s) => ({
+            center: s.center,
+            boundingBox: s.boundingBox,
+            areaMeters2: s.stats.areaMeters2,
+            pitchDegrees: s.pitchDegrees,
+            azimuthDegrees: s.azimuthDegrees,
+          })) || [],
+          totalRoofArea: sc.building.solarPotential?.wholeRoofStats?.areaMeters2 ?? 0,
+          hasSolarPanels: (sc.building.solarPotential?.solarPanels?.length ?? 0) > 0,
+          score: sc.score,
+          confidence: sc.confidence,
+          reasons: sc.reasons,
+        }));
+        saveBuildingsFound(searchId, buildingsForDebug);
+
+        appendPipelineLog(searchId, {
+          stage: "solar_complete",
+          buildingsFound: solarResult.buildings.length,
+          matchesReturned: satelliteMatches.length,
+          topScore: solarResult.allScored[0]?.score ?? 0,
+        });
+
+        console.log(`[PIPELINE] Solar API found ${satelliteMatches.length} candidates (${solarResult.buildings.length} buildings total)`);
       } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appendPipelineLog(searchId, { stage: "solar_failed", error: msg });
         console.warn("[PIPELINE] Solar API failed, falling back to tile scan:", err);
       }
     }

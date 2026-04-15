@@ -20,6 +20,8 @@ export async function GET(
   }));
 
   const progressDetail = search.progress_detail ? JSON.parse(search.progress_detail) : null;
+  const pipelineLog = search.pipeline_log ? JSON.parse(search.pipeline_log) : [];
+  const buildingsFound = search.buildings_found ? JSON.parse(search.buildings_found) : [];
 
   return NextResponse.json({
     id: search.id,
@@ -30,6 +32,8 @@ export async function GET(
     candidates,
     status: search.status,
     progressDetail,
+    pipelineLog,
+    buildingsFound,
     errorMessage: search.error_message,
     createdAt: search.created_at,
   });

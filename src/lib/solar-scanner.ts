@@ -6,7 +6,9 @@ import type {
 } from "./types";
 import { findClosestBuilding, summariseBuilding, type BuildingInsights } from "./solar-api";
 
-interface ScoredBuilding {
+export type { BuildingInsights };
+
+export interface ScoredBuilding {
   building: BuildingInsights;
   score: number;
   reasons: string[];
@@ -145,14 +147,15 @@ export function scoreBuildingAgainstFingerprint(
 }
 
 /**
- * Scan a suburb using Solar API, score all buildings, return top candidates.
+ * Scan a suburb using Solar API, score all buildings, return top candidates
+ * and all scored buildings (for debug/diagnostic display).
  */
 export async function scanSuburbWithSolarApi(
   suburb: SuburbBounds,
   fingerprint: PropertyFingerprint,
   onProgress?: (sampled: number, total: number, found: number) => void,
   maxCandidates: number = 20
-): Promise<TilePropertyMatch[]> {
+): Promise<{ matches: TilePropertyMatch[]; allScored: ScoredBuilding[]; buildings: BuildingInsights[] }> {
   console.log(`[SOLAR] Scanning ${suburb.name} via Solar API...`);
 
   const buildings = await sampleBuildingsInSuburb(suburb, 0.0003, onProgress);
@@ -160,7 +163,7 @@ export async function scanSuburbWithSolarApi(
   console.log(`[SOLAR] Found ${buildings.length} unique buildings in ${suburb.name}`);
 
   if (buildings.length === 0) {
-    return [];
+    return { matches: [], allScored: [], buildings: [] };
   }
 
   // Score every building
@@ -173,10 +176,12 @@ export async function scanSuburbWithSolarApi(
   console.log(`[SOLAR] Top candidate score: ${topCandidates[0]?.score ?? 0}%`);
 
   // Convert to TilePropertyMatch format
-  return topCandidates.map((sc) => ({
+  const matches = topCandidates.map((sc) => ({
     estimatedLat: sc.building.center.latitude,
     estimatedLng: sc.building.center.longitude,
     matchingFeatures: sc.reasons,
     confidence: sc.confidence,
   }));
+
+  return { matches, allScored: scored, buildings };
 }
