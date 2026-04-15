@@ -1,0 +1,117 @@
+<h2>Property Finder — Architecture Overview</h2>
+<p class="subtitle">AI-assisted property identification tool for estate agents</p>
+
+<div class="section">
+  <h3>How It Works — The Pipeline</h3>
+  <div style="display: flex; gap: 16px; flex-wrap: wrap; margin: 20px 0;">
+
+    <div style="flex: 1; min-width: 200px; background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 20px; text-align: center;">
+      <div style="font-size: 32px; margin-bottom: 8px;">1️⃣</div>
+      <h3 style="color: #4fc3f7; margin: 0 0 8px 0;">INPUT</h3>
+      <p style="color: #ccc; font-size: 14px;">Agent pastes a Property24 listing URL</p>
+      <div style="margin-top: 12px; background: #0d1117; border-radius: 8px; padding: 10px; font-size: 12px; color: #8b949e; text-align: left;">
+        → Fetches listing page<br>
+        → Extracts all photos<br>
+        → Extracts price, beds, area, description
+      </div>
+    </div>
+
+    <div style="flex: 1; min-width: 200px; background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 20px; text-align: center;">
+      <div style="font-size: 32px; margin-bottom: 8px;">2️⃣</div>
+      <h3 style="color: #ff9800; margin: 0 0 8px 0;">AI ANALYSIS</h3>
+      <p style="color: #ccc; font-size: 14px;">Claude Vision examines every photo</p>
+      <div style="margin-top: 12px; background: #0d1117; border-radius: 8px; padding: 10px; font-size: 12px; color: #8b949e; text-align: left;">
+        → House number visible?<br>
+        → Roof type, colour, shape<br>
+        → Boundary walls, gates, driveway<br>
+        → Pool shape & position<br>
+        → Trees, garden features<br>
+        → Exterior finish (brick, plaster, etc)<br>
+        → Street clues (signs, landmarks)
+      </div>
+    </div>
+
+    <div style="flex: 1; min-width: 200px; background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 20px; text-align: center;">
+      <div style="font-size: 32px; margin-bottom: 8px;">3️⃣</div>
+      <h3 style="color: #66bb6a; margin: 0 0 8px 0;">SATELLITE SCAN</h3>
+      <p style="color: #ccc; font-size: 14px;">Match features against aerial imagery</p>
+      <div style="margin-top: 12px; background: #0d1117; border-radius: 8px; padding: 10px; font-size: 12px; color: #8b949e; text-align: left;">
+        → Roof outline matching<br>
+        → Pool detection from aerial view<br>
+        → Driveway / boundary patterns<br>
+        → Plot size estimation<br>
+        → Narrow to candidate properties
+      </div>
+    </div>
+
+    <div style="flex: 1; min-width: 200px; background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 20px; text-align: center;">
+      <div style="font-size: 32px; margin-bottom: 8px;">4️⃣</div>
+      <h3 style="color: #ab47bc; margin: 0 0 8px 0;">STREET VIEW VERIFY</h3>
+      <p style="color: #ccc; font-size: 14px;">Compare front-of-house with candidates</p>
+      <div style="margin-top: 12px; background: #0d1117; border-radius: 8px; padding: 10px; font-size: 12px; color: #8b949e; text-align: left;">
+        → Fetch Street View for each candidate<br>
+        → AI compares facade, walls, gates<br>
+        → Confidence score per match<br>
+        → Rank top 3-5 candidates
+      </div>
+    </div>
+
+    <div style="flex: 1; min-width: 200px; background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 20px; text-align: center;">
+      <div style="font-size: 32px; margin-bottom: 8px;">5️⃣</div>
+      <h3 style="color: #ef5350; margin: 0 0 8px 0;">RESULTS</h3>
+      <p style="color: #ccc; font-size: 14px;">Agent reviews matches & confirms</p>
+      <div style="margin-top: 12px; background: #0d1117; border-radius: 8px; padding: 10px; font-size: 12px; color: #8b949e; text-align: left;">
+        → Top candidates with confidence %<br>
+        → Side-by-side photo comparison<br>
+        → Map showing location<br>
+        → One-click "Confirm" to save<br>
+        → Drive-by route suggestion
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="section">
+  <h3>Tech Stack</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+    <div style="background: #0d1117; border-radius: 8px; padding: 16px;">
+      <div style="color: #4fc3f7; font-weight: bold; margin-bottom: 8px;">Frontend</div>
+      <p style="color: #ccc; font-size: 14px; margin: 0;">Next.js web app — simple, clean UI. Works on laptop & mobile browser.</p>
+    </div>
+    <div style="background: #0d1117; border-radius: 8px; padding: 16px;">
+      <div style="color: #ff9800; font-weight: bold; margin-bottom: 8px;">AI Engine</div>
+      <p style="color: #ccc; font-size: 14px; margin: 0;">Claude API (Vision) — analyses listing photos & compares with Street View/satellite.</p>
+    </div>
+    <div style="background: #0d1117; border-radius: 8px; padding: 16px;">
+      <div style="color: #66bb6a; font-weight: bold; margin-bottom: 8px;">Maps & Imagery</div>
+      <p style="color: #ccc; font-size: 14px; margin: 0;">Google Maps Platform — Street View Static API, Maps Static API (satellite), Geocoding.</p>
+    </div>
+    <div style="background: #0d1117; border-radius: 8px; padding: 16px;">
+      <div style="color: #ab47bc; font-weight: bold; margin-bottom: 8px;">Storage & Hosting</div>
+      <p style="color: #ccc; font-size: 14px; margin: 0;">SQLite (local DB) + Vercel or local Node server. Minimal cost.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Estimated Monthly Cost (5-10 listings/week)</h3>
+  <table style="width: 100%; border-collapse: collapse; margin-top: 12px;">
+    <tr style="border-bottom: 1px solid #333;">
+      <td style="padding: 8px; color: #ccc;">Google Maps APIs</td>
+      <td style="padding: 8px; color: #4fc3f7; text-align: right;">~R100-200</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #333;">
+      <td style="padding: 8px; color: #ccc;">Claude API (Vision)</td>
+      <td style="padding: 8px; color: #4fc3f7; text-align: right;">~R100-200</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #333;">
+      <td style="padding: 8px; color: #ccc;">Hosting (Vercel free tier or local)</td>
+      <td style="padding: 8px; color: #4fc3f7; text-align: right;">R0</td>
+    </tr>
+    <tr style="font-weight: bold;">
+      <td style="padding: 8px; color: #fff;">Total</td>
+      <td style="padding: 8px; color: #66bb6a; text-align: right;">~R200-400/month</td>
+    </tr>
+  </table>
+</div>

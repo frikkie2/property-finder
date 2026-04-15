@@ -13,6 +13,7 @@ import { extractListingFromUrl } from "./listing-extractor";
 import { extractFeaturesFromPhotos } from "./feature-extractor";
 import { narrowSuburbs } from "./suburb-narrower";
 import { scanSuburbZones } from "./satellite-scanner";
+import { scanSuburbWithSolarApi } from "./solar-scanner";
 import { verifyCandidates } from "./streetview-verifier";
 
 type ProgressCallback = (progress: SearchProgress) => void;
@@ -99,25 +100,62 @@ export async function runSearchPipeline(
     const allZones = narrowSuburbs(listing, fingerprint);
     const primaryZone = allZones.filter((z) => z.priority === 1);
 
-    // Step 4: Satellite scan — listed suburb only
-    emitProgress("scanning_satellite", `Scanning ${listing.listedSuburb}...`, null, 40);
+    // Step 4a: Try Google Solar API first (fast, building-level data)
+    let satelliteMatches: Awaited<ReturnType<typeof scanSuburbZones>> = [];
 
-    const satelliteMatches = await scanSuburbZones(
-      primaryZone,
-      fingerprint,
-      (scanned, total, suburb) => {
-        const pct = Math.round((scanned / total) * 100);
-        updateSearchProgressDetail(searchId, JSON.stringify({
-          stage: "scanning_satellite",
-          suburb,
-          scanned,
-          total,
-          percentage: pct,
-          message: `Scanning ${suburb}: tile ${scanned} of ${total} (${pct}%)`
-        }));
-        emitProgress("scanning_satellite", `Scanning ${suburb}...`, `Tile ${scanned} of ${total}`, 40 + Math.round((scanned / total) * 35));
+    if (primaryZone.length > 0) {
+      emitProgress("scanning_satellite", `Querying Google Solar API for ${primaryZone[0].suburb.name}...`, null, 40);
+      console.log("[PIPELINE] Trying Solar API first...");
+
+      try {
+        satelliteMatches = await scanSuburbWithSolarApi(
+          primaryZone[0].suburb,
+          fingerprint,
+          (sampled, total, found) => {
+            const pct = Math.round((sampled / total) * 100);
+            updateSearchProgressDetail(searchId, JSON.stringify({
+              stage: "scanning_satellite",
+              suburb: `${primaryZone[0].suburb.name} (Solar API)`,
+              scanned: sampled,
+              total,
+              percentage: pct,
+              message: `Solar API: ${sampled}/${total} points sampled, ${found} buildings found`
+            }));
+            emitProgress("scanning_satellite", `Solar API scan...`, `${sampled}/${total} points, ${found} buildings`, 40 + Math.round((sampled / total) * 35));
+          }
+        );
+
+        console.log(`[PIPELINE] Solar API found ${satelliteMatches.length} candidates`);
+      } catch (err) {
+        console.warn("[PIPELINE] Solar API failed, falling back to tile scan:", err);
       }
-    );
+    }
+
+    // Step 4b: Fall back to tile scan if Solar API returned nothing or too few
+    if (satelliteMatches.length < 3) {
+      console.log(`[PIPELINE] Solar API insufficient (${satelliteMatches.length}), running tile scan fallback`);
+      emitProgress("scanning_satellite", `Running detailed tile scan...`, null, 60);
+
+      const tileMatches = await scanSuburbZones(
+        primaryZone,
+        fingerprint,
+        (scanned, total, suburb) => {
+          const pct = Math.round((scanned / total) * 100);
+          updateSearchProgressDetail(searchId, JSON.stringify({
+            stage: "scanning_satellite",
+            suburb,
+            scanned,
+            total,
+            percentage: pct,
+            message: `Scanning ${suburb}: tile ${scanned} of ${total} (${pct}%)`
+          }));
+          emitProgress("scanning_satellite", `Scanning ${suburb}...`, `Tile ${scanned} of ${total}`, 60 + Math.round((scanned / total) * 15));
+        }
+      );
+
+      // Combine Solar API matches with tile matches
+      satelliteMatches.push(...tileMatches);
+    }
 
     console.log(`[PIPELINE] Suburb scan complete: ${satelliteMatches.length} matches in ${listing.listedSuburb}`);
     emitProgress("scanning_satellite", `Found ${satelliteMatches.length} potential matches in ${listing.listedSuburb}`, null, 75);

@@ -1,0 +1,118 @@
+<h2>Property Identification Engine — How It Works</h2>
+<p class="subtitle">The AI detective process, step by step</p>
+
+<div class="section">
+  <h3>Phase 1: Feature Extraction (from listing photos)</h3>
+  <p style="color: #aaa;">Claude Vision analyses each photo and builds a "property fingerprint"</p>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px;">
+    <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 16px;">
+      <div style="color: #4fc3f7; font-weight: bold; margin-bottom: 8px;">🏠 Exterior Clues</div>
+      <ul style="color: #ccc; font-size: 13px; margin: 0; padding-left: 16px;">
+        <li>House number (if visible on wall/gate)</li>
+        <li>Street name (if visible on sign)</li>
+        <li>Exterior finish — face brick, plaster, painted</li>
+        <li>Roof type — tiles, IBR sheeting, thatch</li>
+        <li>Roof colour — terracotta, charcoal, green</li>
+        <li>Number of storeys</li>
+        <li>Gate/fence style — palisade, wall, precast</li>
+        <li>Garage doors — count, type, colour</li>
+      </ul>
+    </div>
+    <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 16px;">
+      <div style="color: #ff9800; font-weight: bold; margin-bottom: 8px;">🌳 Property Clues</div>
+      <ul style="color: #ccc; font-size: 13px; margin: 0; padding-left: 16px;">
+        <li>Swimming pool — shape (kidney, rectangle, freeform)</li>
+        <li>Large trees — type and position</li>
+        <li>Driveway layout — circular, straight, double</li>
+        <li>Boundary wall height and material</li>
+        <li>Garden features — lapa, braai area, wendy house</li>
+        <li>Solar panels on roof</li>
+        <li>Neighbouring buildings visible</li>
+        <li>Power lines, water towers, landmarks</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="background: #0d1117; border: 1px solid #1a5; border-radius: 8px; padding: 16px; margin-top: 16px;">
+    <div style="color: #66bb6a; font-weight: bold; margin-bottom: 8px;">💡 Quick Wins — Instant Identification</div>
+    <p style="color: #ccc; font-size: 13px; margin: 0;">
+      Sometimes the photos give it away immediately:<br><br>
+      • <strong>Visible house number</strong> → almost done, just confirm the suburb<br>
+      • <strong>Street sign in background</strong> → massive shortcut<br>
+      • <strong>Unique landmark</strong> (church, school, park) → narrows to a block or two<br>
+      • <strong>Estate agent's "Sold" board from previous sale</strong> → sometimes visible in old Street View<br><br>
+      The AI checks for these first before doing the expensive satellite scan.
+    </p>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Phase 2: Suburb Narrowing</h3>
+  <p style="color: #aaa;">Before scanning satellite images, narrow the search area</p>
+
+  <div style="display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 250px; background: #1a1a2e; border-left: 3px solid #4fc3f7; padding: 16px; border-radius: 0 8px 8px 0;">
+      <div style="color: #4fc3f7; font-weight: bold;">Listing Metadata</div>
+      <p style="color: #ccc; font-size: 13px;">Property24 says "Queenswood" but agents often list in adjacent "better" suburbs. So we search the listed suburb + all adjacent ones (e.g., Queenswood + Colbyn + Rietondale + Moregloed).</p>
+    </div>
+    <div style="flex: 1; min-width: 250px; background: #1a1a2e; border-left: 3px solid #ff9800; padding: 16px; border-radius: 0 8px 8px 0;">
+      <div style="color: #ff9800; font-weight: bold;">Price + Size Filter</div>
+      <p style="color: #ccc; font-size: 13px;">A R2.5M, 3-bed in Queenswood rules out certain streets and plot sizes. Cross-reference with municipal valuation data if available to narrow candidate areas.</p>
+    </div>
+    <div style="flex: 1; min-width: 250px; background: #1a1a2e; border-left: 3px solid #66bb6a; padding: 16px; border-radius: 0 8px 8px 0;">
+      <div style="color: #66bb6a; font-weight: bold;">Architectural Style</div>
+      <p style="color: #ccc; font-size: 13px;">Older face-brick vs modern plaster can indicate which part of the suburb — e.g., houses near the Moot tend to be older 1960s-70s stock vs newer sections.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Phase 3: Satellite Matching</h3>
+  <p style="color: #aaa;">The heavy lifting — scanning aerial imagery for matches</p>
+
+  <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 20px; margin-top: 16px;">
+    <div style="display: flex; gap: 20px; align-items: start; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 250px;">
+        <div style="color: #ab47bc; font-weight: bold; margin-bottom: 12px;">How the scan works:</div>
+        <ol style="color: #ccc; font-size: 13px; padding-left: 20px;">
+          <li style="margin-bottom: 8px;">Divide the target suburb(s) into a grid of tiles (each ~100m x 100m)</li>
+          <li style="margin-bottom: 8px;">Fetch Google Maps Static satellite image for each tile at high zoom (zoom 19-20)</li>
+          <li style="margin-bottom: 8px;">Claude Vision analyses each tile: "Does any property in this tile have a [kidney-shaped pool] + [terracotta roof] + [circular driveway]?"</li>
+          <li style="margin-bottom: 8px;">Matching tiles get flagged as candidates</li>
+          <li style="margin-bottom: 8px;">Zoom in on candidates for detailed comparison</li>
+        </ol>
+      </div>
+      <div style="flex: 1; min-width: 250px;">
+        <div style="color: #ef5350; font-weight: bold; margin-bottom: 12px;">⚠️ Cost Control:</div>
+        <ul style="color: #ccc; font-size: 13px; padding-left: 16px;">
+          <li style="margin-bottom: 8px;"><strong>Pre-cache suburb tiles</strong> — download satellite images once, reuse for all future searches. ~R50 one-time cost per suburb.</li>
+          <li style="margin-bottom: 8px;"><strong>Smart filtering</strong> — if AI says "has a pool", skip all tiles where no pool is visible from satellite. Eliminates 60-70% of tiles immediately.</li>
+          <li style="margin-bottom: 8px;"><strong>Feature index</strong> — over time, build a database: "Tile X has 3 properties with pools, 1 with a thatched roof". Future searches just query the index.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Phase 4: Street View Confirmation</h3>
+  <p style="color: #aaa;">Final verification — does the front of the house match?</p>
+
+  <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 20px; margin-top: 16px;">
+    <p style="color: #ccc; font-size: 13px;">
+      For each candidate property from the satellite scan (typically 3-10 matches):
+    </p>
+    <ol style="color: #ccc; font-size: 13px; padding-left: 20px;">
+      <li style="margin-bottom: 6px;">Fetch Google Street View image at the candidate address</li>
+      <li style="margin-bottom: 6px;">Claude Vision compares: "Does this Street View match the front-of-house photo from the listing?"</li>
+      <li style="margin-bottom: 6px;">Score each candidate: boundary wall match, gate style, facade, garage, roof visible from street</li>
+      <li style="margin-bottom: 6px;">Rank by confidence: High (80%+), Medium (50-80%), Low (&lt;50%)</li>
+    </ol>
+    <div style="background: #0d1117; border-radius: 8px; padding: 12px; margin-top: 12px;">
+      <p style="color: #ff9800; font-size: 13px; margin: 0;">
+        ⚠️ <strong>Note:</strong> Google Street View imagery can be 1-5 years old. Properties may have been renovated, walls repainted, trees grown. The AI accounts for this by weighting structural features (roof, plot shape) higher than cosmetic ones (paint colour, garden).
+      </p>
+    </div>
+  </div>
+</div>

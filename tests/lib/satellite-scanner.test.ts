@@ -24,10 +24,17 @@ describe("satellite scanner", () => {
       }
     });
 
-    it("generates expected number of tiles for known dimensions", () => {
+    it("generates expected number of tiles for known dimensions (with 50% overlap)", () => {
       const tiles = generateTileGrid(testSuburb, 0.001);
-      expect(tiles.length).toBeGreaterThan(300);
-      expect(tiles.length).toBeLessThan(600);
+      // With 50% overlap (default), tile count is roughly 4x higher than no overlap
+      expect(tiles.length).toBeGreaterThan(1000);
+      expect(tiles.length).toBeLessThan(3000);
+    });
+
+    it("generates fewer tiles with no overlap", () => {
+      const noOverlap = generateTileGrid(testSuburb, 0.001, 0);
+      const withOverlap = generateTileGrid(testSuburb, 0.001, 0.5);
+      expect(withOverlap.length).toBeGreaterThan(noOverlap.length);
     });
   });
 

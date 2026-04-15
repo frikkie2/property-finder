@@ -11,13 +11,15 @@ import { analyseBase64ImageWithPrompt } from "./claude";
 
 export function generateTileGrid(
   suburb: SuburbBounds,
-  stepDegrees: number = 0.001
+  stepDegrees: number = 0.001,
+  overlapRatio: number = 0.5 // 0.5 = tiles overlap by 50%
 ): TileBounds[] {
   const tiles: TileBounds[] = [];
   const halfStep = stepDegrees / 2;
+  const stride = stepDegrees * (1 - overlapRatio);
 
-  for (let lat = suburb.south + halfStep; lat <= suburb.north; lat += stepDegrees) {
-    for (let lng = suburb.west + halfStep; lng <= suburb.east; lng += stepDegrees) {
+  for (let lat = suburb.south + halfStep; lat <= suburb.north; lat += stride) {
+    for (let lng = suburb.west + halfStep; lng <= suburb.east; lng += stride) {
       tiles.push({
         north: lat + halfStep,
         south: lat - halfStep,
@@ -30,6 +32,40 @@ export function generateTileGrid(
   }
 
   return tiles;
+}
+
+/**
+ * Fast first-pass filter: just check for the most distinctive features.
+ * Skips tiles that clearly don't match to save API costs.
+ */
+export function buildFastFilterPrompt(fingerprint: PropertyFingerprint): string {
+  const mustHave: string[] = [];
+
+  if (fingerprint.poolShape !== "unknown" && fingerprint.poolShape !== "none") {
+    mustHave.push(`a swimming pool`);
+  }
+  if (fingerprint.solarPanels) {
+    mustHave.push(`visible solar panels on any roof`);
+  }
+  if (fingerprint.roofColour) {
+    mustHave.push(`a ${fingerprint.roofColour} roof`);
+  }
+
+  if (mustHave.length === 0) {
+    // No distinctive features — pass through to detailed scan
+    return `Does this satellite image show residential buildings? Answer ONLY: {"hasResidential": true/false}`;
+  }
+
+  const required = mustHave.map((m) => `- ${m}`).join("\n");
+
+  return `Quickly scan this satellite image for these features. Respond ONLY with JSON:
+
+{"hasAny": true/false, "found": ["feature1"]}
+
+Looking for ANY property in this image that has:
+${required}
+
+Be fast and permissive — we'll verify in a second pass.`;
 }
 
 export function buildSatelliteScanPrompt(fingerprint: PropertyFingerprint): string {
@@ -141,6 +177,39 @@ export async function scanTile(
   return { tile, hasMatch: true, matchedProperties };
 }
 
+/**
+ * Fast first-pass: check if tile has any of the must-have features.
+ * Returns true if tile should be detailed-scanned.
+ */
+async function fastFilterTile(
+  tile: TileBounds,
+  fingerprint: PropertyFingerprint
+): Promise<boolean> {
+  const { base64, mediaType } = await fetchSatelliteImage(tile.centerLat, tile.centerLng, 19);
+  const prompt = buildFastFilterPrompt(fingerprint);
+
+  const response = await analyseBase64ImageWithPrompt(base64, mediaType, prompt);
+
+  try {
+    let jsonStr = response.trim();
+    if (jsonStr.startsWith("```")) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    }
+    const parsed = JSON.parse(jsonStr);
+
+    // Pass through if no distinctive features (hasResidential case)
+    if (parsed.hasResidential !== undefined) return parsed.hasResidential;
+
+    return parsed.hasAny === true;
+  } catch {
+    // On parse error, pass through to detailed scan to be safe
+    return true;
+  }
+}
+
+/**
+ * Two-pass scan: fast filter first (cheap), then detailed scan on survivors.
+ */
 export async function scanSuburbZones(
   zones: SuburbZone[],
   fingerprint: PropertyFingerprint,
@@ -150,9 +219,27 @@ export async function scanSuburbZones(
 
   for (const zone of zones) {
     const tiles = generateTileGrid(zone.suburb);
+    console.log(`[SCANNER] ${zone.suburb.name}: ${tiles.length} tiles (with 50% overlap)`);
+
+    // PASS 1: Fast filter — cheap check for must-have features
+    const survivors: TileBounds[] = [];
     let scanned = 0;
 
     for (const tile of tiles) {
+      const passes = await fastFilterTile(tile, fingerprint);
+      if (passes) survivors.push(tile);
+
+      scanned++;
+      if (onProgress) {
+        onProgress(scanned, tiles.length, `${zone.suburb.name} (pass 1)`);
+      }
+    }
+
+    console.log(`[SCANNER] ${zone.suburb.name}: ${survivors.length}/${tiles.length} tiles passed fast filter`);
+
+    // PASS 2: Detailed scan on survivors only
+    scanned = 0;
+    for (const tile of survivors) {
       const result = await scanTile(tile, fingerprint);
 
       if (result.hasMatch) {
@@ -161,7 +248,7 @@ export async function scanSuburbZones(
 
       scanned++;
       if (onProgress) {
-        onProgress(scanned, tiles.length, zone.suburb.name);
+        onProgress(scanned, survivors.length, `${zone.suburb.name} (pass 2)`);
       }
     }
   }

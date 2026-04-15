@@ -3,19 +3,26 @@ import { analyseMultipleImagesWithPrompt } from "./claude";
 
 export function buildFeatureExtractionPrompt(listingDescription: string): string {
   const descriptionSection = listingDescription
-    ? `\n\nLISTING DESCRIPTION (extract any useful features from this text):\n"${listingDescription}"\n`
+    ? `\n\nLISTING DESCRIPTION — extract ALL useful features, especially LOCATION clues like "corner stand", "opposite school", "near park", "facing north", "top of street":\n"${listingDescription}"\n`
     : "";
 
   return `You are analysing property listing photos to build a "property fingerprint" for identification from satellite and street view imagery.
 ${descriptionSection}
 STEP 1 - CLASSIFY EACH PHOTO: First, classify each photo as EXTERIOR (front of house, garden, pool, street view, aerial) or INTERIOR (kitchen, bedroom, bathroom, lounge). Focus your analysis on EXTERIOR photos — they are critical for matching. Interior photos only help estimate the house size/layout.
 
-STEP 2 - QUICK WINS: Look for instant-identification clues:
-- A visible house number on a wall, gate, or letterbox
-- A street name sign visible in any photo
+STEP 2 - OCR / TEXT EXTRACTION (VERY IMPORTANT): Examine EVERY photo carefully for any visible text. Look for:
+- House numbers on walls, gates, letterboxes, paving stones
+- Street name signs in the background or foreground
+- Business signs visible (shops, churches, schools nearby)
+- Estate agent "For Sale" / "Sold" boards from previous listings
+- Any numbers painted on curbs or driveway gates
+- Address plates near doors
+
+STEP 3 - QUICK WINS: Other instant-identification clues:
 - A recognisable landmark (church, school, park, shopping centre)
-- A real estate "Sold" or "For Sale" board from a previous sale
 - A clearly identifiable neighbouring property
+- Mountain/hill views in background (can indicate direction)
+- A specific geographic feature (river, reservoir)
 
 STEP 3 - EXTERIOR FEATURES (from exterior photos):
 - Exterior finish (face_brick / plaster / painted / mixed / unknown) and colour
@@ -60,7 +67,19 @@ Respond with ONLY valid JSON (no markdown, no explanation):
   "roofOutline": "description of building shape from above",
   "garagePosition": "left|right|center|detached|unknown",
   "poolPosition": "back-left|back-right|back-center|front|side|none",
-  "photoClassification": {"exterior": number, "interior": number}
+  "photoClassification": {"exterior": number, "interior": number},
+  "locationClues": {
+    "cornerStand": boolean,
+    "nearSchool": boolean,
+    "nearPark": boolean,
+    "nearChurch": boolean,
+    "nearShoppingCentre": boolean,
+    "facing": "north|south|east|west|unknown",
+    "topOfStreet": boolean,
+    "cornerOfStreets": null or "Street1 & Street2",
+    "otherClues": ["string"]
+  },
+  "visibleText": ["list all visible text from photos: signs, numbers, words"]
 }`;
 }
 

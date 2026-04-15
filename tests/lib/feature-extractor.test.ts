@@ -12,7 +12,7 @@ describe("feature extractor", () => {
     it("returns a non-empty prompt string", () => {
       const prompt = buildFeatureExtractionPrompt("");
       expect(prompt).toBeTruthy();
-      expect(prompt).toContain("house number");
+      expect(prompt).toContain("House numbers");
       expect(prompt).toContain("roof");
       expect(prompt).toContain("Swimming pool");
       expect(prompt).toContain("JSON");

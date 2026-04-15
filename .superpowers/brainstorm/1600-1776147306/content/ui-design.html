@@ -1,0 +1,224 @@
+<h2>Property Finder — UI Design</h2>
+<p class="subtitle">What the agent sees — simple, fast, mobile-friendly</p>
+
+<div class="section">
+  <h3>Screen 1: Dashboard</h3>
+  <div class="mockup">
+    <div class="mockup-header">Property Finder — Dashboard</div>
+    <div class="mockup-body" style="background: #f8f9fa; color: #333; padding: 0;">
+
+      <!-- Top bar -->
+      <div style="background: #1a56db; color: white; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-weight: bold; font-size: 16px;">🏠 Property Finder</div>
+        <div style="font-size: 13px;">Pretoria East • 12 suburbs</div>
+      </div>
+
+      <!-- Paste URL section -->
+      <div style="padding: 20px; background: white; border-bottom: 1px solid #e5e7eb;">
+        <div style="font-weight: bold; color: #333; margin-bottom: 8px;">Find a property</div>
+        <div style="display: flex; gap: 8px;">
+          <div style="flex: 1; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px 14px; color: #9ca3af; font-size: 14px;">
+            Paste Property24 listing URL here...
+          </div>
+          <div style="background: #1a56db; color: white; padding: 10px 20px; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; white-space: nowrap;">
+            🔍 Search
+          </div>
+        </div>
+        <div style="margin-top: 8px; font-size: 12px; color: #9ca3af;">
+          Or <span style="color: #1a56db; text-decoration: underline; cursor: pointer;">upload screenshots manually</span>
+        </div>
+      </div>
+
+      <!-- Recent searches -->
+      <div style="padding: 20px;">
+        <div style="font-weight: bold; color: #333; margin-bottom: 12px;">Recent searches</div>
+
+        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 8px; padding: 14px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 600; color: #333; font-size: 14px;">3 Bed house — R2,450,000</div>
+            <div style="color: #6b7280; font-size: 12px;">Listed as "Queenswood" • Searched 2 hours ago</div>
+          </div>
+          <div style="background: #dcfce7; color: #166534; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold;">
+            92% match found
+          </div>
+        </div>
+
+        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 8px; padding: 14px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 600; color: #333; font-size: 14px;">4 Bed house — R3,100,000</div>
+            <div style="color: #6b7280; font-size: 12px;">Listed as "Meyerspark" • Searched yesterday</div>
+          </div>
+          <div style="background: #fef9c3; color: #854d0e; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold;">
+            3 candidates (65%)
+          </div>
+        </div>
+
+        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 600; color: #333; font-size: 14px;">3 Bed townhouse — R1,800,000</div>
+            <div style="color: #6b7280; font-size: 12px;">Listed as "Silverton" • Searched 3 days ago</div>
+          </div>
+          <div style="background: #fee2e2; color: #991b1b; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold;">
+            No match
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Screen 2: Processing (while AI is working)</h3>
+  <div class="mockup">
+    <div class="mockup-header">Property Finder — Analysing</div>
+    <div class="mockup-body" style="background: #f8f9fa; color: #333; padding: 0;">
+      <div style="background: #1a56db; color: white; padding: 12px 20px; font-weight: bold; font-size: 16px;">🏠 Property Finder</div>
+
+      <!-- Listing summary -->
+      <div style="padding: 16px 20px; background: white; border-bottom: 1px solid #e5e7eb;">
+        <div style="display: flex; gap: 12px; align-items: start;">
+          <div style="width: 80px; height: 60px; background: #e5e7eb; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 11px;">Photo 1</div>
+          <div>
+            <div style="font-weight: bold; color: #333;">3 Bed, 2 Bath — R2,450,000</div>
+            <div style="color: #6b7280; font-size: 13px;">Listed suburb: Queenswood • 18 photos</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress steps -->
+      <div style="padding: 20px;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+          <div style="width: 28px; height: 28px; background: #166534; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px;">✓</div>
+          <div>
+            <div style="font-weight: 600; color: #333; font-size: 14px;">Listing extracted</div>
+            <div style="color: #6b7280; font-size: 12px;">18 photos, 3 bed, 2 bath, 850m² plot</div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+          <div style="width: 28px; height: 28px; background: #166534; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px;">✓</div>
+          <div>
+            <div style="font-weight: 600; color: #333; font-size: 14px;">AI feature extraction</div>
+            <div style="color: #6b7280; font-size: 12px;">Found: terracotta roof, kidney pool, face brick, palisade fence, 2x garage</div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+          <div style="width: 28px; height: 28px; background: #1a56db; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px;">
+            <div style="width: 14px; height: 14px; border: 2px solid white; border-top-color: transparent; border-radius: 50%; animation: none;"></div>
+          </div>
+          <div>
+            <div style="font-weight: 600; color: #333; font-size: 14px;">Satellite scanning...</div>
+            <div style="color: #6b7280; font-size: 12px;">Searching Queenswood + Colbyn + Rietondale • Tile 34 of 120</div>
+            <div style="background: #e5e7eb; border-radius: 4px; height: 6px; margin-top: 6px; width: 200px;">
+              <div style="background: #1a56db; border-radius: 4px; height: 6px; width: 56%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; opacity: 0.4;">
+          <div style="width: 28px; height: 28px; background: #e5e7eb; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 14px;">4</div>
+          <div>
+            <div style="font-weight: 600; color: #9ca3af; font-size: 14px;">Street View verification</div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 12px; opacity: 0.4;">
+          <div style="width: 28px; height: 28px; background: #e5e7eb; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 14px;">5</div>
+          <div>
+            <div style="font-weight: 600; color: #9ca3af; font-size: 14px;">Results & ranking</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Screen 3: Results</h3>
+  <div class="mockup">
+    <div class="mockup-header">Property Finder — Match Results</div>
+    <div class="mockup-body" style="background: #f8f9fa; color: #333; padding: 0;">
+      <div style="background: #1a56db; color: white; padding: 12px 20px; font-weight: bold; font-size: 16px;">🏠 Property Finder</div>
+
+      <!-- Top match -->
+      <div style="padding: 16px 20px; background: white; border-bottom: 1px solid #e5e7eb;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div style="font-weight: bold; color: #333; font-size: 16px;">Best Match — 92% confidence</div>
+          <div style="background: #dcfce7; color: #166534; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: bold;">HIGH</div>
+        </div>
+
+        <!-- Side by side comparison -->
+        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+          <div style="flex: 1;">
+            <div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; text-transform: uppercase;">Listing Photo</div>
+            <div style="background: #dbeafe; border-radius: 6px; height: 100px; display: flex; align-items: center; justify-content: center; color: #1a56db; font-size: 12px; border: 2px solid #93c5fd;">
+              🏠 Front of house<br>(from Property24)
+            </div>
+          </div>
+          <div style="flex: 1;">
+            <div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; text-transform: uppercase;">Google Street View</div>
+            <div style="background: #fef3c7; border-radius: 6px; height: 100px; display: flex; align-items: center; justify-content: center; color: #92400e; font-size: 12px; border: 2px solid #fcd34d;">
+              🗺️ Street View match<br>(Google Maps)
+            </div>
+          </div>
+        </div>
+
+        <!-- Match details -->
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+          <div style="font-size: 13px; color: #333;">
+            <strong>📍 27 Russel Street, Queenswood</strong><br>
+            <span style="color: #6b7280; font-size: 12px;">
+              Matching features: terracotta roof ✓ | kidney pool ✓ | face brick ✓ | palisade fence ✓ | double garage ✓
+            </span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <div style="flex: 1; background: #1a56db; color: white; padding: 10px; border-radius: 8px; text-align: center; font-size: 13px; font-weight: bold; cursor: pointer;">
+            ✅ Confirm Match
+          </div>
+          <div style="flex: 1; background: white; color: #1a56db; border: 1px solid #1a56db; padding: 10px; border-radius: 8px; text-align: center; font-size: 13px; font-weight: bold; cursor: pointer;">
+            📍 Open in Google Maps
+          </div>
+        </div>
+      </div>
+
+      <!-- Other candidates -->
+      <div style="padding: 16px 20px;">
+        <div style="font-weight: bold; color: #333; margin-bottom: 12px;">Other candidates</div>
+
+        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 600; color: #333; font-size: 13px;">14 Beckett Street, Colbyn</div>
+            <div style="color: #6b7280; font-size: 12px;">Roof ✓ | Pool ✓ | Brick ✓ | Fence ✗ | Garage ✓</div>
+          </div>
+          <div style="background: #fef9c3; color: #854d0e; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold;">
+            71%
+          </div>
+        </div>
+
+        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 600; color: #333; font-size: 13px;">8 Murray Street, Queenswood</div>
+            <div style="color: #6b7280; font-size: 12px;">Roof ✓ | Pool ✗ | Brick ✓ | Fence ✓ | Garage ✗</div>
+          </div>
+          <div style="background: #fee2e2; color: #991b1b; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold;">
+            43%
+          </div>
+        </div>
+      </div>
+
+      <!-- Drive-by route -->
+      <div style="padding: 0 20px 20px;">
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 14px; display: flex; align-items: center; gap: 12px;">
+          <div style="font-size: 24px;">🚗</div>
+          <div>
+            <div style="font-weight: 600; color: #1e40af; font-size: 14px;">Plan drive-by route</div>
+            <div style="color: #3b82f6; font-size: 12px;">Visit all 3 candidates in one trip — estimated 12 min drive</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
