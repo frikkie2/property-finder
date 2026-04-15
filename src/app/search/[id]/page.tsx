@@ -161,9 +161,87 @@ export default function SearchPage() {
           {data.listing.photoUrls?.length > 0 && (
             <section>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-                Listing photos
+                Listing photos ({data.listing.photoUrls.length})
               </p>
               <PhotoStrip photoUrls={data.listing.photoUrls} />
+            </section>
+          )}
+
+          {/* Extracted fingerprint — what AI saw */}
+          {(data as any).fingerprint && (
+            <section className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-800 mb-2">
+                What the AI extracted from the photos
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-gray-800">
+                {(() => {
+                  const f = (data as any).fingerprint;
+                  const rows = [
+                    ["House number", f.houseNumber],
+                    ["Street clue", f.streetClue],
+                    ["Exterior", f.exteriorFinish !== "unknown" ? `${f.exteriorFinish}${f.exteriorColour ? ` (${f.exteriorColour})` : ""}` : null],
+                    ["Roof", f.roofType !== "unknown" ? `${f.roofType}${f.roofColour ? ` (${f.roofColour})` : ""}` : null],
+                    ["Roof shape", f.roofOutline],
+                    ["Storeys", f.storeys],
+                    ["Garages", f.garageCount > 0 ? `${f.garageCount} (${f.garagePosition ?? "?"} side)` : null],
+                    ["Pool", f.poolShape !== "none" && f.poolShape !== "unknown" ? `${f.poolShape} (${f.poolPosition ?? "?"})` : "none"],
+                    ["Fence", f.fenceType !== "unknown" ? f.fenceType : null],
+                    ["Driveway", f.drivewayType !== "unknown" ? f.drivewayType : null],
+                    ["Solar panels", f.solarPanels ? "yes" : "no"],
+                  ].filter(([, v]) => v !== null && v !== undefined && v !== "");
+
+                  return rows.map(([label, value]) => (
+                    <div key={label as string}><strong>{label}:</strong> {String(value)}</div>
+                  ));
+                })()}
+              </div>
+              {(() => {
+                const f = (data as any).fingerprint;
+                if (f.quickWins?.length > 0) {
+                  return (
+                    <div className="mt-3 rounded bg-green-100 border border-green-300 p-2 text-xs text-green-900">
+                      <strong>⚡ Quick wins found:</strong>
+                      {f.quickWins.map((qw: any, i: number) => (
+                        <div key={i}>• {qw.type}: "{qw.value}" ({qw.confidence} confidence)</div>
+                      ))}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              {(() => {
+                const f = (data as any).fingerprint;
+                if (f.visibleText?.length > 0) {
+                  return (
+                    <div className="mt-2 text-xs text-gray-700">
+                      <strong>Visible text in photos:</strong> {f.visibleText.join(", ")}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              {(() => {
+                const f = (data as any).fingerprint;
+                const clues = f.locationClues;
+                if (clues) {
+                  const active = Object.entries(clues).filter(([k, v]) =>
+                    v === true || (typeof v === "string" && v !== "unknown" && v !== null) || (Array.isArray(v) && v.length > 0)
+                  );
+                  if (active.length > 0) {
+                    return (
+                      <div className="mt-2 text-xs text-gray-700">
+                        <strong>Location clues from description:</strong>
+                        <ul className="ml-4 list-disc">
+                          {active.map(([k, v]) => (
+                            <li key={k}>{k}: {JSON.stringify(v)}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  }
+                }
+                return null;
+              })()}
             </section>
           )}
 
