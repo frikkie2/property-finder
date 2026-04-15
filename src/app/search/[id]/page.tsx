@@ -115,16 +115,24 @@ export default function SearchPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Breadcrumb / header */}
-      <div>
-        <a href="/" className="text-xs text-blue-700 hover:underline">
-          &larr; Back to dashboard
+      <div className="flex justify-between items-start">
+        <div>
+          <a href="/" className="text-xs text-blue-700 hover:underline">
+            &larr; Back to dashboard
+          </a>
+          <h1 className="text-base font-semibold text-gray-900 mt-1 break-all">
+            {data.property24Url}
+          </h1>
+          {data.listedSuburb && (
+            <p className="text-xs text-gray-500 mt-0.5">Listed suburb: {data.listedSuburb}</p>
+          )}
+        </div>
+        <a
+          href={`/search/${id}/debug`}
+          className="text-xs text-gray-600 hover:text-blue-700 underline whitespace-nowrap"
+        >
+          🔍 Debug view
         </a>
-        <h1 className="text-base font-semibold text-gray-900 mt-1 break-all">
-          {data.property24Url}
-        </h1>
-        {data.listedSuburb && (
-          <p className="text-xs text-gray-500 mt-0.5">Listed suburb: {data.listedSuburb}</p>
-        )}
       </div>
 
       {/* In-progress state */}
