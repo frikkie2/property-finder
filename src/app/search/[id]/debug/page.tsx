@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import RoofSketch from "@/components/RoofSketch";
 
 interface PipelineEvent {
   stage: string;
@@ -11,27 +10,16 @@ interface PipelineEvent {
 }
 
 interface BuildingData {
-  name: string;
+  id: number;
   center: { latitude: number; longitude: number };
-  boundingBox: {
-    sw: { latitude: number; longitude: number };
-    ne: { latitude: number; longitude: number };
-  };
-  roofSegments: Array<{
-    center: { latitude: number; longitude: number };
-    boundingBox: {
-      sw: { latitude: number; longitude: number };
-      ne: { latitude: number; longitude: number };
-    };
-    areaMeters2: number;
-    pitchDegrees: number;
-    azimuthDegrees: number;
-  }>;
-  totalRoofArea: number;
-  hasSolarPanels: boolean;
+  address: string | null;
+  polygon: { lat: number; lng: number }[];
+  areaMeters2: number;
   score: number;
-  confidence: string;
-  reasons: string[];
+  reasoning: string;
+  matchingFeatures: string[];
+  differences: string[];
+  streetViewImageUrl: string;
 }
 
 export default function DebugPage() {
@@ -51,13 +39,15 @@ export default function DebugPage() {
 
   const listing = data.listing || {};
   const fingerprint = data.fingerprint || {};
-  const candidates = data.candidates || [];
   const pipelineLog: PipelineEvent[] = data.pipelineLog || [];
   const buildings: BuildingData[] = data.buildingsFound || [];
-  const displayBuildings = buildingFilter === "top" ? buildings.slice(0, 20) : buildings;
+  const displayBuildings = buildingFilter === "top" ? buildings.slice(0, 30) : buildings;
+
+  const frontIdx = fingerprint.bestFrontOfHousePhotoIndex;
+  const frontPhotoUrl = frontIdx && frontIdx > 0 && listing.photoUrls ? listing.photoUrls[frontIdx - 1] : listing.photoUrls?.[0];
 
   return (
-    <div className="max-w-5xl mx-auto p-5 space-y-6">
+    <div className="max-w-6xl mx-auto p-5 space-y-6">
       <div>
         <a href={`/search/${id}`} className="text-xs text-blue-700 hover:underline">
           &larr; Back to search results
@@ -90,12 +80,29 @@ export default function DebugPage() {
         )}
       </section>
 
-      {/* Listing + photos */}
+      {/* Front-of-house photo being compared */}
+      {frontPhotoUrl && (
+        <section className="rounded-lg border border-blue-300 bg-blue-50 p-4">
+          <h2 className="font-bold mb-2">Reference Photo (being compared to each building)</h2>
+          <p className="text-xs text-gray-600 mb-3">
+            Photo #{frontIdx || 1} — identified as the best front-of-house shot.
+          </p>
+          <div className="max-w-md">
+            <img
+              src={`/api/proxy-image?url=${encodeURIComponent(frontPhotoUrl)}`}
+              alt="Reference"
+              className="rounded border border-gray-300"
+            />
+          </div>
+        </section>
+      )}
+
+      {/* All listing photos for reference */}
       <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h2 className="font-bold mb-3">Input: Listing Photos ({listing.photoUrls?.length || 0})</h2>
+        <h2 className="font-bold mb-3">All Listing Photos ({listing.photoUrls?.length || 0})</h2>
         <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
           {(listing.photoUrls || []).map((url: string, i: number) => (
-            <div key={i} className="relative aspect-video rounded overflow-hidden border border-gray-200">
+            <div key={i} className={`relative aspect-video rounded overflow-hidden border-2 ${i + 1 === frontIdx ? "border-blue-600" : "border-gray-200"}`}>
               <img
                 src={`/api/proxy-image?url=${encodeURIComponent(url)}`}
                 alt={`Photo ${i + 1}`}
@@ -104,6 +111,11 @@ export default function DebugPage() {
               <span className="absolute top-1 left-1 bg-black/70 text-white text-[9px] px-1 py-0.5 rounded">
                 #{i + 1}
               </span>
+              {i + 1 === frontIdx && (
+                <span className="absolute bottom-1 right-1 bg-blue-600 text-white text-[9px] px-1 py-0.5 rounded">
+                  FRONT
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -111,38 +123,28 @@ export default function DebugPage() {
 
       {/* Fingerprint */}
       <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h2 className="font-bold mb-3">AI Fingerprint (what we're looking for)</h2>
+        <h2 className="font-bold mb-3">AI Fingerprint</h2>
         {!fingerprint || Object.keys(fingerprint).length === 0 ? (
           <p className="text-xs text-gray-400">No fingerprint extracted.</p>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-            {Object.entries(fingerprint).map(([key, value]) => {
-              const displayValue = Array.isArray(value) || typeof value === "object" && value !== null
-                ? JSON.stringify(value)
-                : String(value);
-              return (
-                <div key={key} className="bg-gray-50 rounded p-2">
-                  <div className="text-gray-500 text-[10px] uppercase">{key}</div>
-                  <div className="font-mono text-gray-800 mt-0.5">{displayValue}</div>
-                </div>
-              );
-            })}
-          </div>
+          <pre className="bg-gray-50 rounded p-3 text-[11px] overflow-x-auto">
+            {JSON.stringify(fingerprint, null, 2)}
+          </pre>
         )}
       </section>
 
-      {/* Solar API buildings — ROOF SKETCHES */}
+      {/* Side-by-side building comparisons */}
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="flex justify-between items-center mb-3">
           <h2 className="font-bold">
-            Buildings from Solar API ({buildings.length}) — Roof Outline Sketches
+            All Buildings Considered ({buildings.length}) — Side-by-Side Comparisons
           </h2>
           <div className="flex gap-2 text-xs">
             <button
               onClick={() => setBuildingFilter("top")}
               className={`px-2 py-1 rounded ${buildingFilter === "top" ? "bg-blue-700 text-white" : "bg-gray-100"}`}
             >
-              Top 20
+              Top 30
             </button>
             <button
               onClick={() => setBuildingFilter("all")}
@@ -154,102 +156,97 @@ export default function DebugPage() {
         </div>
 
         {buildings.length === 0 ? (
-          <p className="text-xs text-gray-400">
-            No buildings returned by Solar API. This suburb may not have coverage.
-          </p>
+          <p className="text-xs text-gray-400">No buildings compared yet.</p>
         ) : (
-          <>
-            <p className="text-xs text-gray-500 mb-3">
-              Each box is a roof outline traced from Google Solar API data.
-              Colour indicates facing direction (blue=north, green=east, amber=south, purple=west).
-              Red dot = building centre. Score is how well the roof shape matches the fingerprint.
-            </p>
-            <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
-              {displayBuildings.map((b, i) => (
-                <div key={b.name || i} className="flex flex-col">
-                  <RoofSketch building={b} size={120} />
-                  <div className="mt-2 text-xs">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold">{b.score}%</span>
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded ${
-                          b.confidence === "high"
-                            ? "bg-green-100 text-green-800"
-                            : b.confidence === "medium"
-                            ? "bg-yellow-100 text-yellow-800"
-                            : "bg-gray-100 text-gray-600"
-                        }`}
-                      >
-                        {b.confidence}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">
-                      {b.center.latitude.toFixed(4)}, {b.center.longitude.toFixed(4)}
-                    </div>
-                    {b.hasSolarPanels && (
-                      <div className="text-[10px] text-yellow-700 mt-0.5">☀ Solar panels</div>
-                    )}
-                    <details className="mt-1">
-                      <summary className="text-[10px] text-blue-700 cursor-pointer">Reasons</summary>
-                      <ul className="text-[10px] text-gray-700 mt-1 space-y-0.5">
-                        {b.reasons.map((r, j) => (
-                          <li key={j}>{r}</li>
-                        ))}
-                      </ul>
-                    </details>
-                    <div className="flex gap-1 mt-1">
-                      <a
-                        href={`https://www.google.com/maps?q=${b.center.latitude},${b.center.longitude}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[10px] text-blue-700 hover:underline"
-                      >
-                        Map
-                      </a>
-                      <a
-                        href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${b.center.latitude},${b.center.longitude}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[10px] text-blue-700 hover:underline"
-                      >
-                        Street
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </section>
-
-      {/* Final candidates (post verification) */}
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h2 className="font-bold mb-3">Final Candidates (after Street View verification) — {candidates.length}</h2>
-        {candidates.length === 0 ? (
-          <p className="text-xs text-gray-400">No candidates passed verification.</p>
-        ) : (
-          <div className="space-y-3">
-            {candidates.map((c: any, i: number) => (
-              <div key={c.id} className="border border-gray-200 rounded p-3 text-xs">
-                <div className="flex justify-between items-start">
+          <div className="space-y-4">
+            {displayBuildings.map((b, i) => (
+              <div key={b.id || i} className="border border-gray-200 rounded p-3">
+                <div className="flex justify-between items-start mb-2">
                   <div>
-                    <p className="font-semibold">#{i + 1} {c.address}</p>
-                    <p className="text-gray-500">
-                      {c.latitude?.toFixed(6)}, {c.longitude?.toFixed(6)} — {c.confidence_score}% ({c.confidence_level})
+                    <p className="font-semibold text-sm">
+                      #{i + 1} · {b.address || `${b.center.latitude.toFixed(6)}, ${b.center.longitude.toFixed(6)}`}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {Math.round(b.areaMeters2)}m² footprint
                     </p>
                   </div>
+                  <span
+                    className={`px-2 py-1 rounded text-xs font-bold ${
+                      b.score >= 70
+                        ? "bg-green-100 text-green-800"
+                        : b.score >= 45
+                        ? "bg-yellow-100 text-yellow-800"
+                        : "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {b.score}%
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-[10px] text-gray-500 uppercase mb-1">Listing</div>
+                    <img
+                      src={`/api/proxy-image?url=${encodeURIComponent(frontPhotoUrl || "")}`}
+                      alt="Listing"
+                      className="w-full aspect-video object-cover rounded border border-blue-300"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-gray-500 uppercase mb-1">Street View</div>
+                    <img
+                      src={b.streetViewImageUrl}
+                      alt="Street View"
+                      className="w-full aspect-video object-cover rounded border border-yellow-300"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-700 mt-2 italic">"{b.reasoning}"</p>
+
+                {(b.matchingFeatures.length > 0 || b.differences.length > 0) && (
+                  <div className="grid grid-cols-2 gap-3 mt-2 text-xs">
+                    {b.matchingFeatures.length > 0 && (
+                      <div>
+                        <p className="font-semibold text-green-700 text-[10px] uppercase">Matches</p>
+                        <ul className="text-green-800 space-y-0.5">
+                          {b.matchingFeatures.map((f, j) => (
+                            <li key={j}>✓ {f}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {b.differences.length > 0 && (
+                      <div>
+                        <p className="font-semibold text-red-700 text-[10px] uppercase">Differences</p>
+                        <ul className="text-red-800 space-y-0.5">
+                          {b.differences.map((d, j) => (
+                            <li key={j}>✗ {d}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-3 mt-2 text-xs">
                   <a
-                    href={`https://www.google.com/maps?q=${c.latitude},${c.longitude}`}
+                    href={`https://www.google.com/maps?q=${b.center.latitude},${b.center.longitude}`}
                     target="_blank"
+                    rel="noreferrer"
                     className="text-blue-700 hover:underline"
                   >
                     Map &#8599;
                   </a>
+                  <a
+                    href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${b.center.latitude},${b.center.longitude}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-700 hover:underline"
+                  >
+                    Street View &#8599;
+                  </a>
                 </div>
-                {c.ai_explanation && (
-                  <p className="text-gray-700 mt-2 italic">"{c.ai_explanation}"</p>
-                )}
               </div>
             ))}
           </div>
@@ -258,7 +255,7 @@ export default function DebugPage() {
 
       {/* Raw data */}
       <details className="rounded-lg border border-gray-200 bg-white p-4">
-        <summary className="font-bold cursor-pointer text-xs">Raw search data (for deep debugging)</summary>
+        <summary className="font-bold cursor-pointer text-xs">Raw search data</summary>
         <pre className="bg-gray-50 rounded p-3 text-[11px] overflow-x-auto mt-3">
           {JSON.stringify(data, null, 2)}
         </pre>

@@ -14,9 +14,9 @@ import {
 import { extractListingFromUrl } from "./listing-extractor";
 import { extractFeaturesFromPhotos } from "./feature-extractor";
 import { narrowSuburbs } from "./suburb-narrower";
-import { scanSuburbZones } from "./satellite-scanner";
-import { scanSuburbWithSolarApi } from "./solar-scanner";
-import { verifyCandidates } from "./streetview-verifier";
+import { fetchBuildingsInSuburb, filterResidentialBuildings } from "./osm-api";
+import { downloadListingPhoto, scoreBuildingsInParallel } from "./facade-matcher";
+import { v4 as uuidv4 } from "uuid";
 
 type ProgressCallback = (progress: SearchProgress) => void;
 
@@ -98,132 +98,144 @@ export async function runSearchPipeline(
     }
 
     // Step 3: Narrow suburbs — only search the listed suburb
-    emitProgress("narrowing_suburbs", `Searching ${listing.listedSuburb} only`, null, 35);
+    emitProgress("narrowing_suburbs", `Searching ${listing.listedSuburb} only`, null, 30);
     const allZones = narrowSuburbs(listing, fingerprint);
     const primaryZone = allZones.filter((z) => z.priority === 1);
 
-    // Step 4a: Try Google Solar API first (fast, building-level data)
-    let satelliteMatches: Awaited<ReturnType<typeof scanSuburbZones>> = [];
+    if (primaryZone.length === 0) {
+      throw new Error(`Unknown suburb: ${listing.listedSuburb}`);
+    }
 
-    if (primaryZone.length > 0) {
-      emitProgress("scanning_satellite", `Querying Google Solar API for ${primaryZone[0].suburb.name}...`, null, 40);
-      console.log("[PIPELINE] Trying Solar API first...");
-      appendPipelineLog(searchId, { stage: "solar_start", suburb: primaryZone[0].suburb.name });
+    // Step 4: Fetch all buildings in the suburb from OpenStreetMap
+    emitProgress("scanning_satellite", `Fetching building data for ${primaryZone[0].suburb.name}...`, null, 35);
+    appendPipelineLog(searchId, { stage: "osm_fetch_start", suburb: primaryZone[0].suburb.name });
 
-      try {
-        const solarResult = await scanSuburbWithSolarApi(
-          primaryZone[0].suburb,
-          fingerprint,
-          (sampled, total, found) => {
-            const pct = Math.round((sampled / total) * 100);
-            updateSearchProgressDetail(searchId, JSON.stringify({
-              stage: "scanning_satellite",
-              suburb: `${primaryZone[0].suburb.name} (Solar API)`,
-              scanned: sampled,
-              total,
-              percentage: pct,
-              message: `Solar API: ${sampled}/${total} points sampled, ${found} buildings found`
-            }));
-            emitProgress("scanning_satellite", `Solar API scan...`, `${sampled}/${total} points, ${found} buildings`, 40 + Math.round((sampled / total) * 35));
-          }
-        );
+    const allBuildings = await fetchBuildingsInSuburb(primaryZone[0].suburb);
+    const residentialBuildings = filterResidentialBuildings(allBuildings);
 
-        satelliteMatches = solarResult.matches;
+    appendPipelineLog(searchId, {
+      stage: "osm_fetch_complete",
+      totalBuildings: allBuildings.length,
+      residentialBuildings: residentialBuildings.length,
+    });
 
-        // Save all scored buildings (including low scores) for debug display
-        const buildingsForDebug = solarResult.allScored.map((sc) => ({
-          name: sc.building.name,
-          center: sc.building.center,
-          boundingBox: sc.building.boundingBox,
-          roofSegments: sc.building.solarPotential?.roofSegmentStats?.map((s) => ({
-            center: s.center,
-            boundingBox: s.boundingBox,
-            areaMeters2: s.stats.areaMeters2,
-            pitchDegrees: s.pitchDegrees,
-            azimuthDegrees: s.azimuthDegrees,
-          })) || [],
-          totalRoofArea: sc.building.solarPotential?.wholeRoofStats?.areaMeters2 ?? 0,
-          hasSolarPanels: (sc.building.solarPotential?.solarPanels?.length ?? 0) > 0,
-          score: sc.score,
-          confidence: sc.confidence,
-          reasons: sc.reasons,
+    console.log(`[PIPELINE] OSM: ${allBuildings.length} total, ${residentialBuildings.length} residential`);
+    emitProgress("scanning_satellite", `Found ${residentialBuildings.length} residential buildings in ${primaryZone[0].suburb.name}`, null, 40);
+
+    if (residentialBuildings.length === 0) {
+      throw new Error(`No residential buildings found in ${primaryZone[0].suburb.name} via OSM`);
+    }
+
+    // Step 5: Select the front-of-house photo and download it
+    const frontIdx = (fingerprint as { bestFrontOfHousePhotoIndex?: number }).bestFrontOfHousePhotoIndex;
+    const photoIdx = frontIdx && frontIdx > 0 && frontIdx <= listing.photoUrls.length ? frontIdx - 1 : 0;
+    const frontPhotoUrl = listing.photoUrls[photoIdx];
+
+    emitProgress("scanning_satellite", `Downloading front-of-house photo (photo #${photoIdx + 1})...`, null, 42);
+    const listingPhoto = await downloadListingPhoto(frontPhotoUrl);
+
+    appendPipelineLog(searchId, {
+      stage: "facade_photo_selected",
+      photoIndex: photoIdx + 1,
+      photoUrl: frontPhotoUrl,
+      photoHash: listingPhoto.hash,
+    });
+
+    // Step 6: Compare listing photo to Street View of every residential building
+    emitProgress("verifying_streetview", `Comparing facade to ${residentialBuildings.length} buildings via Street View...`, null, 45);
+
+    const scoredCandidates = await scoreBuildingsInParallel(
+      residentialBuildings,
+      listingPhoto.base64,
+      listingPhoto.hash,
+      listingPhoto.mediaType,
+      (scored, total, topScore) => {
+        const pct = Math.round((scored / total) * 100);
+        updateSearchProgressDetail(searchId, JSON.stringify({
+          stage: "verifying_streetview",
+          suburb: primaryZone[0].suburb.name,
+          scanned: scored,
+          total,
+          percentage: pct,
+          message: `Compared ${scored}/${total} buildings — top score so far: ${topScore}%`,
         }));
-        saveBuildingsFound(searchId, buildingsForDebug);
-
-        appendPipelineLog(searchId, {
-          stage: "solar_complete",
-          buildingsFound: solarResult.buildings.length,
-          matchesReturned: satelliteMatches.length,
-          topScore: solarResult.allScored[0]?.score ?? 0,
-        });
-
-        console.log(`[PIPELINE] Solar API found ${satelliteMatches.length} candidates (${solarResult.buildings.length} buildings total)`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        appendPipelineLog(searchId, { stage: "solar_failed", error: msg });
-        console.warn("[PIPELINE] Solar API failed, falling back to tile scan:", err);
-      }
-    }
-
-    // Step 4b: Fall back to tile scan if Solar API returned nothing or too few
-    if (satelliteMatches.length < 3) {
-      console.log(`[PIPELINE] Solar API insufficient (${satelliteMatches.length}), running tile scan fallback`);
-      emitProgress("scanning_satellite", `Running detailed tile scan...`, null, 60);
-
-      const tileMatches = await scanSuburbZones(
-        primaryZone,
-        fingerprint,
-        (scanned, total, suburb) => {
-          const pct = Math.round((scanned / total) * 100);
-          updateSearchProgressDetail(searchId, JSON.stringify({
-            stage: "scanning_satellite",
-            suburb,
-            scanned,
-            total,
-            percentage: pct,
-            message: `Scanning ${suburb}: tile ${scanned} of ${total} (${pct}%)`
-          }));
-          emitProgress("scanning_satellite", `Scanning ${suburb}...`, `Tile ${scanned} of ${total}`, 60 + Math.round((scanned / total) * 15));
-        }
-      );
-
-      // Combine Solar API matches with tile matches
-      satelliteMatches.push(...tileMatches);
-    }
-
-    console.log(`[PIPELINE] Suburb scan complete: ${satelliteMatches.length} matches in ${listing.listedSuburb}`);
-    emitProgress("scanning_satellite", `Found ${satelliteMatches.length} potential matches in ${listing.listedSuburb}`, null, 75);
-
-    // Step 5: Street View verification
-    emitProgress("verifying_streetview", "Verifying candidates via Street View...", null, 78);
-    const candidates = await verifyCandidates(
-      satelliteMatches,
-      fingerprint,
-      searchId,
-      10,
-      (verified, total) => {
-        const pct = 78 + Math.round((verified / total) * 17);
-        emitProgress("verifying_streetview", `Verifying candidate ${verified} of ${total}...`, null, pct);
+        emitProgress(
+          "verifying_streetview",
+          `Comparing building ${scored} of ${total}...`,
+          `Top score: ${topScore}%`,
+          45 + Math.round((scored / total) * 50)
+        );
       }
     );
 
-    // Step 6: Save candidates
-    for (const candidate of candidates) {
+    appendPipelineLog(searchId, {
+      stage: "facade_matching_complete",
+      buildingsScored: scoredCandidates.length,
+      topScore: scoredCandidates[0]?.score.score ?? 0,
+    });
+
+    // Save all scored buildings for debug display
+    const buildingsForDebug = scoredCandidates.map((sc) => ({
+      id: sc.building.id,
+      center: { latitude: sc.building.center.lat, longitude: sc.building.center.lng },
+      address: sc.building.address || null,
+      polygon: sc.building.polygon,
+      areaMeters2: sc.building.areaMeters2,
+      score: sc.score.score,
+      reasoning: sc.score.reasoning,
+      matchingFeatures: sc.score.matchingFeatures,
+      differences: sc.score.differences,
+      streetViewImageUrl: sc.streetViewImageUrl,
+    }));
+    saveBuildingsFound(searchId, buildingsForDebug);
+
+    // Step 7: Save top 20 as candidates in the DB (user can review more via debug page)
+    const topCandidates = scoredCandidates.slice(0, 20);
+    for (const sc of topCandidates) {
+      const score = sc.score.score;
+      const confidenceLevel: "high" | "medium" | "low" =
+        score >= 70 ? "high" : score >= 45 ? "medium" : "low";
+
+      const featureMatches = [
+        ...sc.score.matchingFeatures.map((f) => ({ feature: f, matched: true, source: "street_view", notes: null })),
+        ...sc.score.differences.map((d) => ({ feature: d, matched: false, source: "street_view", notes: null })),
+      ];
+
       upsertCandidate({
         searchId,
-        address: candidate.address,
-        latitude: candidate.latitude,
-        longitude: candidate.longitude,
-        confidenceScore: candidate.confidenceScore,
-        confidenceLevel: candidate.confidenceLevel,
-        satelliteMatchScore: candidate.satelliteMatchScore,
-        streetviewMatchScore: candidate.streetviewMatchScore,
-        featureMatches: JSON.stringify(candidate.featureMatches),
-        aiExplanation: candidate.aiExplanation,
-        streetviewImageUrl: candidate.streetviewImageUrl,
-        satelliteImageUrl: candidate.satelliteImageUrl,
+        address: sc.building.address || `${sc.building.center.lat.toFixed(6)}, ${sc.building.center.lng.toFixed(6)}`,
+        latitude: sc.building.center.lat,
+        longitude: sc.building.center.lng,
+        confidenceScore: score,
+        confidenceLevel,
+        satelliteMatchScore: 0,
+        streetviewMatchScore: score,
+        featureMatches: JSON.stringify(featureMatches),
+        aiExplanation: sc.score.reasoning,
+        streetviewImageUrl: sc.streetViewImageUrl,
+        satelliteImageUrl: null,
       });
     }
+
+    // We don't use the old satellite + verification flow anymore — but keep a stub
+    // for the old fingerprint variable reference
+    const candidates = topCandidates.map((sc) => ({
+      id: uuidv4(),
+      listingId: searchId,
+      address: sc.building.address || `${sc.building.center.lat.toFixed(6)}, ${sc.building.center.lng.toFixed(6)}`,
+      latitude: sc.building.center.lat,
+      longitude: sc.building.center.lng,
+      confidenceScore: sc.score.score,
+      confidenceLevel: (sc.score.score >= 70 ? "high" : sc.score.score >= 45 ? "medium" : "low") as "high" | "medium" | "low",
+      satelliteMatchScore: 0,
+      streetviewMatchScore: sc.score.score,
+      featureMatches: [],
+      aiExplanation: sc.score.reasoning,
+      streetviewImageUrl: sc.streetViewImageUrl,
+      satelliteImageUrl: null,
+      status: "pending" as const,
+      confirmedAt: null,
+    }));
 
     // Step 7: Complete
     emitProgress("complete", "Search complete", `${candidates.length} candidates found`, 100);

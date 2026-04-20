@@ -8,7 +8,14 @@ export function buildFeatureExtractionPrompt(listingDescription: string): string
 
   return `You are analysing property listing photos to build a "property fingerprint" for identification from satellite and street view imagery.
 ${descriptionSection}
-STEP 1 - CLASSIFY EACH PHOTO: First, classify each photo as EXTERIOR (front of house, garden, pool, street view, aerial) or INTERIOR (kitchen, bedroom, bathroom, lounge). Focus your analysis on EXTERIOR photos — they are critical for matching. Interior photos only help estimate the house size/layout.
+STEP 1 - CLASSIFY EACH PHOTO: First, classify each photo:
+- FRONT_OF_HOUSE: the facade as seen from the street (this is CRITICAL — it's what Street View shows)
+- STREET_VIEW: photos taken from the street looking at the property
+- EXTERIOR_OTHER: garden, pool, back yard
+- AERIAL: aerial/drone shots
+- INTERIOR: kitchen, bedroom, bathroom, lounge (least useful)
+
+CRITICAL: Identify the SINGLE BEST front-of-house photo — the one that shows the facade most clearly as it would appear from the street. Return its photo number (1-indexed) in the output.
 
 STEP 2 - OCR / TEXT EXTRACTION (VERY IMPORTANT): Examine EVERY photo carefully for any visible text. Look for:
 - House numbers on walls, gates, letterboxes, paving stones
@@ -67,7 +74,8 @@ Respond with ONLY valid JSON (no markdown, no explanation):
   "roofOutline": "description of building shape from above",
   "garagePosition": "left|right|center|detached|unknown",
   "poolPosition": "back-left|back-right|back-center|front|side|none",
-  "photoClassification": {"exterior": number, "interior": number},
+  "photoClassification": {"frontOfHouse": number, "streetView": number, "exteriorOther": number, "aerial": number, "interior": number},
+  "bestFrontOfHousePhotoIndex": number (1-indexed photo number that best shows the facade, or 0 if none),
   "locationClues": {
     "cornerStand": boolean,
     "nearSchool": boolean,
