@@ -21,7 +21,7 @@ export interface ScoredBuilding {
  */
 export async function sampleBuildingsInSuburb(
   suburb: SuburbBounds,
-  stepDegrees: number = 0.0003, // ~33m at this latitude
+  stepDegrees: number = 0.0006, // ~66m at this latitude — catches most residential plots (typical 600-1000m²)
   onProgress?: (sampled: number, total: number, found: number) => void
 ): Promise<BuildingInsights[]> {
   const buildings = new Map<string, BuildingInsights>();
@@ -29,30 +29,37 @@ export async function sampleBuildingsInSuburb(
   const latSteps = Math.ceil((suburb.north - suburb.south) / stepDegrees);
   const lngSteps = Math.ceil((suburb.east - suburb.west) / stepDegrees);
   const total = latSteps * lngSteps;
-  let sampled = 0;
 
+  // Build the full point list first
+  const points: { lat: number; lng: number }[] = [];
   for (let i = 0; i < latSteps; i++) {
     for (let j = 0; j < lngSteps; j++) {
-      const lat = suburb.south + i * stepDegrees;
-      const lng = suburb.west + j * stepDegrees;
-
-      const building = await findClosestBuilding(lat, lng);
-      sampled++;
-
-      if (building) {
-        // Dedupe by building name (Solar API returns the same name for the same building)
-        if (!buildings.has(building.name)) {
-          buildings.set(building.name, building);
-        }
-      }
-
-      if (onProgress && sampled % 10 === 0) {
-        onProgress(sampled, total, buildings.size);
-      }
+      points.push({
+        lat: suburb.south + i * stepDegrees,
+        lng: suburb.west + j * stepDegrees,
+      });
     }
   }
 
-  if (onProgress) onProgress(total, total, buildings.size);
+  // Process in parallel batches
+  const BATCH_SIZE = 10;
+  let sampled = 0;
+
+  for (let i = 0; i < points.length; i += BATCH_SIZE) {
+    const batch = points.slice(i, i + BATCH_SIZE);
+    const results = await Promise.all(batch.map((p) => findClosestBuilding(p.lat, p.lng)));
+
+    for (const building of results) {
+      if (building && !buildings.has(building.name)) {
+        buildings.set(building.name, building);
+      }
+    }
+
+    sampled += batch.length;
+    if (onProgress) {
+      onProgress(sampled, total, buildings.size);
+    }
+  }
 
   return Array.from(buildings.values());
 }
@@ -158,7 +165,7 @@ export async function scanSuburbWithSolarApi(
 ): Promise<{ matches: TilePropertyMatch[]; allScored: ScoredBuilding[]; buildings: BuildingInsights[] }> {
   console.log(`[SOLAR] Scanning ${suburb.name} via Solar API...`);
 
-  const buildings = await sampleBuildingsInSuburb(suburb, 0.0003, onProgress);
+  const buildings = await sampleBuildingsInSuburb(suburb, 0.0006, onProgress);
 
   console.log(`[SOLAR] Found ${buildings.length} unique buildings in ${suburb.name}`);
 
