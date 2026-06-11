@@ -1,10 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
 
+const CACHE_DIR = path.join(process.cwd(), ".cache", "listing-photos");
+
+/**
+ * Proxies listing photos for the browser. On restrictive networks
+ * images.prop24.com is unreachable from this machine entirely — in that case
+ * we serve a labelled placeholder rather than a broken image. Successful
+ * fetches are cached so photos keep working after a network change.
+ */
 export async function GET(request: NextRequest) {
   const imageUrl = request.nextUrl.searchParams.get("url");
-
   if (!imageUrl) {
     return NextResponse.json({ error: "Missing url parameter" }, { status: 400 });
+  }
+
+  const cacheFile = path.join(
+    CACHE_DIR,
+    crypto.createHash("md5").update(imageUrl).digest("hex") + ".img"
+  );
+  if (fs.existsSync(cacheFile)) {
+    return new NextResponse(new Uint8Array(fs.readFileSync(cacheFile)), {
+      headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
+    });
   }
 
   try {
@@ -12,24 +32,35 @@ export async function GET(request: NextRequest) {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://www.property24.com/",
+        Referer: "https://www.property24.com/",
       },
+      signal: AbortSignal.timeout(8000),
     });
 
-    if (!response.ok) {
-      return NextResponse.json({ error: "Failed to fetch image" }, { status: 502 });
-    }
+    if (!response.ok) throw new Error(`upstream ${response.status}`);
 
     const buffer = Buffer.from(await response.arrayBuffer());
-    const contentType = response.headers.get("content-type") || "image/jpeg";
+    try {
+      fs.mkdirSync(CACHE_DIR, { recursive: true });
+      fs.writeFileSync(cacheFile, buffer);
+    } catch { /* cache write is best-effort */ }
 
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
-        "Content-Type": contentType,
-        "Cache-Control": "public, max-age=3600",
+        "Content-Type": response.headers.get("content-type") || "image/jpeg",
+        "Cache-Control": "public, max-age=86400",
       },
     });
   } catch {
-    return NextResponse.json({ error: "Proxy error" }, { status: 500 });
+    // Network-blocked: serve a labelled placeholder (the AI pipeline is
+    // unaffected — it reads these photos via Anthropic's servers).
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240">
+  <rect width="100%" height="100%" fill="#f3f4f6"/>
+  <text x="50%" y="46%" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#9ca3af">photo blocked on</text>
+  <text x="50%" y="58%" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#9ca3af">this network</text>
+</svg>`;
+    return new NextResponse(svg, {
+      headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" },
+    });
   }
 }

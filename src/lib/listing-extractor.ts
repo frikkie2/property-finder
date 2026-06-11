@@ -1,165 +1,114 @@
 import * as cheerio from "cheerio";
 import type { ListingData } from "./types";
+import { fetchPage } from "./net";
+
+/**
+ * Property24 serves every listing photo from images.prop24.com/<numericId>/<sizeVariant>.
+ * The same photo appears at many sizes (Crop600x400, Ensure1280x720, bare id...).
+ * We dedupe by numeric ID and request a consistent high-res variant.
+ */
+const PHOTO_VARIANT = "Ensure1280x720";
+
+function photoUrlFor(id: string): string {
+  return `https://images.prop24.com/${id}/${PHOTO_VARIANT}`;
+}
+
+function extractPhotoId(src: string): string | null {
+  const match = src.match(/images\.prop24\.com\/(\d{6,})/i);
+  return match ? match[1] : null;
+}
 
 export function parseListingHtml(html: string, url: string): ListingData {
   const $ = cheerio.load(html);
 
-  // Extract suburb from title — pattern: "X Bedroom House for sale in SUBURB"
+  // Suburb from title — "4 Bedroom House for sale in Silverton - Pretoria - Property24"
   const title = $(".p24_propertyTitle").text().trim() || $("title").text().trim();
   const suburbMatch = title.match(/(?:for sale|to rent) in (.+?)(?:\s*-|$)/i);
   const listedSuburb = suburbMatch ? suburbMatch[1].trim() : "";
 
-  // Price — "R 2 450 000" → 2450000
   const priceText = $(".p24_price").first().text().trim();
   const price = parsePrice(priceText);
 
-  // Features — bedrooms, bathrooms, garages
   const bedrooms = extractFeatureCount($, "Bedrooms");
   const bathrooms = extractFeatureCount($, "Bathrooms");
   const parking = extractFeatureCount($, "Garages") || extractFeatureCount($, "Parking");
 
-  // Sizes
   const plotSize = extractSize($, "Erf Size");
   const floorSize = extractSize($, "Floor Size");
 
-  // Property type from title
   const typeMatch = title.match(/\d+\s+Bedroom\s+(\w+)/i);
   const propertyType = typeMatch ? typeMatch[1].toLowerCase() : null;
 
-  // Description
-  const description = $(".p24_description").text().trim();
+  // Full description: Property24 renders it inside .p24_descriptionContainer
+  // (with the complete text in .p24_expandedText when long). The meta tag is
+  // TRUNCATED — it loses key sentences like "with a swimming pool" — so it's
+  // strictly a last resort.
+  const description =
+    $(".p24_expandedText").text().trim() ||
+    $(".p24_descriptionContainer").text().replace(/Read full description|Close full description/g, "").trim() ||
+    $(".p24_description").text().trim() ||
+    $('meta[name="description"]').attr("content")?.trim() || "";
 
-  // Agent
   const agentName = $(".p24_agentName").first().text().trim() || null;
   const agencyName = $(".p24_agencyName").first().text().trim() || null;
 
-  // Photos — collect only listing gallery photos, skip agent/agency photos
-  const photoUrls: string[] = [];
-  const seen = new Set<string>();
-
-  // Selectors for agent/branding areas — EXCLUDE images inside these
+  // --- Photos ---
   const EXCLUDE_SELECTORS = [
-    ".p24_agentDetail",
-    ".p24_agentName",
-    ".p24_agencyName",
-    ".p24_agent",
-    ".p24_agency",
-    ".agent-card",
-    ".agent-photo",
-    ".agency-logo",
-    ".p24_branding",
-    ".p24_footer",
-    ".p24_header",
-    ".p24_menu",
-    ".p24_sidebar",
+    ".p24_agentDetail", ".p24_agentName", ".p24_agencyName", ".p24_agent",
+    ".p24_agency", ".agent-card", ".agent-photo", ".agency-logo",
+    ".p24_branding", ".p24_footer", ".p24_header", ".p24_menu", ".p24_sidebar",
+    ".p24_similarListings", ".p24_results",
   ].join(", ");
 
-  // URL patterns that indicate non-property images
-  function isLikelyPropertyPhoto(src: string): boolean {
-    if (!src || !src.startsWith("http")) return false;
-    if (src.endsWith(".svg")) return false;
+  const galleryIds: string[] = [];
+  const seen = new Set<string>();
 
-    // Property24 listing photos go through images.prop24.com or similar
-    // with numeric paths like /375825252/... — agents/logos have different patterns
-    const lower = src.toLowerCase();
-    if (lower.includes("/logos/")) return false;
-    if (lower.includes("/icons/")) return false;
-    if (lower.includes("/agent")) return false;
-    if (lower.includes("/agency")) return false;
-    if (lower.includes("/agencies/")) return false;
-    if (lower.includes("/branding/")) return false;
-    if (lower.includes("/avatar")) return false;
-    if (lower.includes("/profile")) return false;
-    if (lower.includes("logo.")) return false;
-    if (lower.includes("banner")) return false;
-    if (lower.includes("headshot")) return false;
-    // Small thumbnails likely icons (Property24 uses /Ensure40x40 etc for icons)
-    if (/\/ensure\d{1,3}x\d{1,3}\b/i.test(src)) return false;
-
-    // Must be from property24 image CDN
-    if (!src.includes("prop24.com") && !src.includes("property24.com") && !src.includes("p24")) {
-      return false;
+  function addId(src: string | undefined, into: string[]) {
+    if (!src) return;
+    const id = extractPhotoId(src);
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      into.push(id);
     }
-
-    return true;
   }
 
-  // Pass 1: try the listing gallery specifically
-  $(".p24_galleryThumbnails img, .p24_mainPhoto img, .p24_photo img, .gallery img, .p24_photoGallery img").each((_, el) => {
-    const src = $(el).attr("src") || $(el).attr("data-src") || "";
-    if (isLikelyPropertyPhoto(src) && !seen.has(src)) {
-      seen.add(src);
-      photoUrls.push(src);
-    }
-  });
-
-  // Pass 2: check all images (even in galleries might be lazy-loaded)
-  // Try every src-like attribute
-  $("img").each((_, el) => {
+  // Pass 1: gallery / lightbox containers (in DOM order = listing photo order)
+  $(".p24_galleryThumbnails img, .p24_mainPhoto img, .p24_photo img, .gallery img, .p24_photoGallery img, [class*='gallery'] img, [class*='lightbox'] img").each((_, el) => {
     const $el = $(el);
-    // Skip if inside an excluded container (agent/agency/branding)
     if ($el.closest(EXCLUDE_SELECTORS).length > 0) return;
-
-    const candidateAttrs = [
-      "src",
-      "data-src",
-      "data-lazy-src",
-      "data-original",
-      "data-hi-res-src",
-      "data-full",
-      "data-image",
-    ];
-
-    for (const attr of candidateAttrs) {
-      const src = $el.attr(attr) || "";
-      if (isLikelyPropertyPhoto(src) && !seen.has(src)) {
-        seen.add(src);
-        photoUrls.push(src);
-      }
+    for (const attr of ["src", "data-src", "data-lazy-src", "data-original", "data-image-src", "lazy-src"]) {
+      addId($el.attr(attr), galleryIds);
     }
   });
 
-  // Pass 3: scrape image URLs from JSON embedded in the page (common for SPAs)
-  const rawHtml = html;
-  const urlRegex = /https?:\/\/[^"'\s)]+?\.(?:jpg|jpeg|png|webp)(?:\?[^"'\s)]*)?/gi;
-  const jsonMatches = rawHtml.match(urlRegex) || [];
-  for (const url of jsonMatches) {
-    // Remove any trailing punctuation
-    const cleaned = url.replace(/[,;)}]+$/, "");
-    if (isLikelyPropertyPhoto(cleaned) && !seen.has(cleaned)) {
-      seen.add(cleaned);
-      photoUrls.push(cleaned);
-    }
-  }
-
-  // Pass 4: JSON-LD structured data (many sites include all images there)
+  // Pass 2: JSON-LD structured data
   $('script[type="application/ld+json"]').each((_, el) => {
     try {
-      const raw = $(el).html() || "";
-      const data = JSON.parse(raw);
+      const data = JSON.parse($(el).html() || "");
       const images = Array.isArray(data.image) ? data.image : data.image ? [data.image] : [];
       for (const img of images) {
-        const url = typeof img === "string" ? img : img.url;
-        if (isLikelyPropertyPhoto(url) && !seen.has(url)) {
-          seen.add(url);
-          photoUrls.push(url);
-        }
+        addId(typeof img === "string" ? img : img?.url, galleryIds);
       }
-    } catch {
-      // ignore parse errors
-    }
+    } catch { /* ignore */ }
   });
 
-  // Pass 5: Open Graph meta tags (usually has main photo)
-  $('meta[property="og:image"], meta[name="twitter:image"]').each((_, el) => {
-    const content = $(el).attr("content") || "";
-    if (isLikelyPropertyPhoto(content) && !seen.has(content)) {
-      seen.add(content);
-      photoUrls.push(content);
-    }
-  });
+  // Pass 3: og:image (always the main listing photo — prepend if new)
+  const ogIds: string[] = [];
+  addId($('meta[property="og:image"]').attr("content") || undefined, ogIds);
 
-  console.log(`[EXTRACTOR] Found ${photoUrls.length} photos for ${url}`);
+  // Pass 4 (fallback only): regex over raw HTML. This catches lazy-loaded
+  // gallery JSON but can also pick up agent headshots, so only use it when
+  // the DOM passes found too little.
+  const fallbackIds: string[] = [];
+  if (galleryIds.length < 3) {
+    const matches = html.match(/images\.prop24\.com\/(\d{6,})/gi) || [];
+    for (const m of matches) addId(m, fallbackIds);
+  }
+
+  const allIds = [...ogIds, ...galleryIds, ...fallbackIds];
+  const photoUrls = allIds.map(photoUrlFor);
+
+  console.log(`[EXTRACTOR] ${photoUrls.length} photos (gallery ${galleryIds.length}, og ${ogIds.length}, fallback ${fallbackIds.length}) for ${url}`);
 
   return {
     property24Url: url,
@@ -180,19 +129,16 @@ export function parseListingHtml(html: string, url: string): ListingData {
 }
 
 export async function extractListingFromUrl(url: string): Promise<ListingData> {
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    },
-  });
+  const page = await fetchPage(url);
+  const listing = parseListingHtml(page.html, url);
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch listing: ${response.status} ${response.statusText}`);
+  if (!listing.listedSuburb && !listing.photoUrls.length) {
+    throw new Error(
+      `Could not parse listing (fetched via ${page.via}, HTTP ${page.status}). ` +
+      `Property24 may have changed their page structure.`
+    );
   }
-
-  const html = await response.text();
-  return parseListingHtml(html, url);
+  return listing;
 }
 
 function parsePrice(text: string): number | null {
@@ -204,7 +150,11 @@ function parsePrice(text: string): number | null {
 type CheerioRoot = ReturnType<typeof cheerio.load>;
 
 function extractFeatureCount($: CheerioRoot, title: string): number | null {
-  const el = $(`.p24_featureDetail[title="${title}"]`).first();
+  // Current markup: <li class="p24_featureDetails" title="Bedrooms"><img/><span>4</span></li>
+  // Older markup:   <span class="p24_featureDetail" title="Bedrooms">4</span>
+  const el = $(`.p24_featureDetails[title="${title}"] span`).first().length
+    ? $(`.p24_featureDetails[title="${title}"] span`).first()
+    : $(`.p24_featureDetail[title="${title}"]`).first();
   if (!el.length) return null;
   const num = parseInt(el.text().trim(), 10);
   return isNaN(num) ? null : num;
@@ -213,11 +163,18 @@ function extractFeatureCount($: CheerioRoot, title: string): number | null {
 function extractSize($: CheerioRoot, label: string): number | null {
   let value: string | null = null;
 
-  $(".p24_propertyOverviewKey").each((_, el) => {
-    if ($(el).text().trim() === label) {
-      value = $(el).next(".p24_propertyOverviewValue").text().trim();
-    }
-  });
+  // Current markup: <button title="Erf Size">...<span>1 500 m²</span></button>
+  const btn = $(`button[title="${label}"]`).first();
+  if (btn.length) value = btn.find("span").first().text().trim();
+
+  // Older markup: overview key/value table
+  if (!value) {
+    $(".p24_propertyOverviewKey").each((_, el) => {
+      if ($(el).text().trim() === label) {
+        value = $(el).next(".p24_propertyOverviewValue").text().trim();
+      }
+    });
+  }
 
   if (!value) return null;
   const num = parseInt((value as string).replace(/[^0-9]/g, ""), 10);

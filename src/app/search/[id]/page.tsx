@@ -181,10 +181,11 @@ export default function SearchPage() {
                     ["Street clue", f.streetClue],
                     ["Exterior", f.exteriorFinish !== "unknown" ? `${f.exteriorFinish}${f.exteriorColour ? ` (${f.exteriorColour})` : ""}` : null],
                     ["Roof", f.roofType !== "unknown" ? `${f.roofType}${f.roofColour ? ` (${f.roofColour})` : ""}` : null],
-                    ["Roof shape", f.roofOutline],
+                    ["Roof shape", f.aerial?.roofShape],
+                    ["Stand size", f.aerial?.standSizeM2 ? `~${f.aerial.standSizeM2} m²` : null],
                     ["Storeys", f.storeys],
-                    ["Garages", f.garageCount > 0 ? `${f.garageCount} (${f.garagePosition ?? "?"} side)` : null],
-                    ["Pool", f.poolShape !== "none" && f.poolShape !== "unknown" ? `${f.poolShape} (${f.poolPosition ?? "?"})` : "none"],
+                    ["Garages", f.garageCount > 0 ? f.garageCount : null],
+                    ["Pool", f.poolShape !== "none" && f.poolShape !== "unknown" ? `${f.poolShape}${f.aerial?.poolPosition ? ` (${f.aerial.poolPosition})` : ""}` : "none"],
                     ["Fence", f.fenceType !== "unknown" ? f.fenceType : null],
                     ["Driveway", f.drivewayType !== "unknown" ? f.drivewayType : null],
                     ["Solar panels", f.solarPanels ? "yes" : "no"],
@@ -195,6 +196,20 @@ export default function SearchPage() {
                   ));
                 })()}
               </div>
+              {(() => {
+                const f = (data as any).fingerprint;
+                if (!f.aerial?.summary && !f.facade?.summary) return null;
+                return (
+                  <div className="mt-3 space-y-2 text-xs text-gray-700">
+                    {f.aerial?.summary && (
+                      <p><strong>From above (satellite signature):</strong> {f.aerial.summary}</p>
+                    )}
+                    {f.facade?.summary && (
+                      <p><strong>From the street (facade signature):</strong> {f.facade.summary}</p>
+                    )}
+                  </div>
+                );
+              })()}
               {(() => {
                 const f = (data as any).fingerprint;
                 if (f.quickWins?.length > 0) {

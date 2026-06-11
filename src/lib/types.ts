@@ -43,6 +43,41 @@ export interface PropertyFingerprint {
   landmarks: string[];
   neighbourFeatures: string[];
   quickWins: QuickWin[];
+  /** What this property looks like from directly above — drives the satellite sweep. */
+  aerial: AerialSignature | null;
+  /** What this property looks like from the street — drives Street View comparison. */
+  facade: FacadeSignature | null;
+}
+
+export interface AerialSignature {
+  roofShape: string;
+  roofColour: string | null;
+  poolPresent: boolean;
+  poolShape: PoolShape;
+  poolPosition: string | null;
+  standSizeM2: number | null;
+  drivewayDescription: string | null;
+  treeCover: string | null;
+  outbuildings: string[];
+  distinctiveAerial: string[];
+  /** One-paragraph description of the stand as seen from a satellite. */
+  summary: string;
+}
+
+export interface FacadeSignature {
+  /** One-paragraph description of the house as seen from the street. */
+  summary: string;
+  /** 1-indexed listing photo numbers that best show the street facade. */
+  bestPhotoIndexes: number[];
+}
+
+/** A location flagged by the satellite sweep as possibly matching the listing. */
+export interface SweepCandidate {
+  lat: number;
+  lng: number;
+  confidence: ConfidenceLevel;
+  matchedFeatures: string[];
+  tileKey: string;
 }
 
 export interface QuickWin {

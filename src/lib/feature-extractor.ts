@@ -1,66 +1,40 @@
-import type { PropertyFingerprint } from "./types";
-import { analyseMultipleImagesWithPrompt } from "./claude";
+import type { ListingData, PropertyFingerprint } from "./types";
+import { MODELS, urlImage, visionJson } from "./claude";
 
-export function buildFeatureExtractionPrompt(listingDescription: string): string {
-  const descriptionSection = listingDescription
-    ? `\n\nLISTING DESCRIPTION — extract ALL useful features, especially LOCATION clues like "corner stand", "opposite school", "near park", "facing north", "top of street":\n"${listingDescription}"\n`
-    : "";
+export function buildFeatureExtractionPrompt(listing: ListingData): string {
+  const facts = [
+    listing.bedrooms ? `${listing.bedrooms} bedrooms` : null,
+    listing.bathrooms ? `${listing.bathrooms} bathrooms` : null,
+    listing.parking ? `${listing.parking} garages/parking` : null,
+    listing.plotSize ? `erf (stand) size ${listing.plotSize} m²` : null,
+    listing.floorSize ? `floor size ${listing.floorSize} m²` : null,
+    listing.propertyType ? `type: ${listing.propertyType}` : null,
+  ].filter(Boolean).join(", ");
 
-  return `You are analysing property listing photos to build a "property fingerprint" for identification from satellite and street view imagery.
-${descriptionSection}
-STEP 1 - CLASSIFY EACH PHOTO: First, classify each photo:
-- FRONT_OF_HOUSE: the facade as seen from the street (this is CRITICAL — it's what Street View shows)
-- STREET_VIEW: photos taken from the street looking at the property
-- EXTERIOR_OTHER: garden, pool, back yard
-- AERIAL: aerial/drone shots
-- INTERIOR: kitchen, bedroom, bathroom, lounge (least useful)
+  return `You are analysing photos from a property listing (each labelled "Photo N").
+The goal: build a fingerprint that lets us find this exact house in ${listing.listedSuburb || "a Pretoria suburb"} using satellite imagery and Google Street View.
 
-CRITICAL: Identify the SINGLE BEST front-of-house photo — the one that shows the facade most clearly as it would appear from the street. Return its photo number (1-indexed) in the output.
+LISTING FACTS: ${facts || "none"}
+LISTING DESCRIPTION:
+"""${listing.description || "(none)"}"""
 
-STEP 2 - OCR / TEXT EXTRACTION (VERY IMPORTANT): Examine EVERY photo carefully for any visible text. Look for:
-- House numbers on walls, gates, letterboxes, paving stones
-- Street name signs in the background or foreground
-- Business signs visible (shops, churches, schools nearby)
-- Estate agent "For Sale" / "Sold" boards from previous listings
-- Any numbers painted on curbs or driveway gates
-- Address plates near doors
+Extract THREE things:
 
-STEP 3 - QUICK WINS: Other instant-identification clues:
-- A recognisable landmark (church, school, park, shopping centre)
-- A clearly identifiable neighbouring property
-- Mountain/hill views in background (can indicate direction)
-- A specific geographic feature (river, reservoir)
+1. QUICK WINS — instant identification clues. OCR every photo: house numbers on walls/gates/letterboxes/curbs, street name signs, "For Sale" board phone numbers, visible business signs or landmarks (churches, schools, shops), water towers / hills / cell masts in the background. Mine the description for location clues ("corner stand", "opposite the school", "walking distance from X").
 
-STEP 3 - EXTERIOR FEATURES (from exterior photos):
-- Exterior finish (face_brick / plaster / painted / mixed / unknown) and colour
-- Roof type (tiles / ibr_sheeting / thatch / concrete / unknown) and colour
-- Number of storeys
-- Gate/fence type (palisade / wall / precast / face_brick / none / unknown)
-- Number of garage doors and type
-- Swimming pool shape (kidney / rectangle / freeform / round / none / unknown)
-- Driveway type (circular / straight / double / none / unknown)
-- Solar panels on roof (true/false)
-- Notable external features (lapa, braai area, wendy house, water feature, etc)
-- Any visible landmarks in background
-- Any distinctive features of neighbouring properties
+2. AERIAL SIGNATURE — what this stand looks like from DIRECTLY ABOVE on satellite imagery. Reason it out from the photos: roof shape/colour as seen from above (L/T/U/rectangular, wings), pool presence + shape + position relative to the house, stand size, driveway shape and surface, lapa/wendy house/outbuildings, big trees, solar panels/geysers on the roof, boundary walls. Use the erf size to estimate how big the stand looks. Note imagery may be a few years old — pools and roofs persist, gardens change.
+IMPORTANT: the listing description is AUTHORITATIVE for hard features. If it mentions a swimming pool, jacuzzi, lapa, borehole, flatlet etc., include it in the aerial signature even when no photo shows it (agents often skip pool photos).
 
-STEP 4 - ROOF/BUILDING OUTLINE (critical for satellite matching):
-Estimate the approximate shape of the building as seen from above (bird's eye view). Describe:
-- Overall roof shape: L-shaped, T-shaped, U-shaped, rectangular, square, irregular
-- Approximate proportions (e.g., "long narrow rectangle with a wing to the right")
-- Position of garage relative to main house
-- Position of pool relative to house
-- Any outbuildings (wendy house, lapa) and their position
+3. FACADE SIGNATURE — what this house looks like from THE STREET. Wall material and colour, roof type/colour, storeys, gate and fence style, garage door count/colour, window pattern, driveway, distinctive permanent features. Also state which photo numbers best show the street facade (front of house as visible from the road) — these will be compared against Street View. Exclude interior shots, back gardens and aerial shots.
 
-Respond with ONLY valid JSON (no markdown, no explanation):
-
+Respond with ONLY valid JSON:
 {
-  "houseNumber": null or "string",
-  "streetClue": null or "string",
+  "houseNumber": null | "string (only if actually visible in a photo)",
+  "streetClue": null | "street name if visible/mentioned",
   "exteriorFinish": "face_brick|plaster|painted|mixed|unknown",
-  "exteriorColour": null or "string",
+  "exteriorColour": null | "string",
   "roofType": "tiles|ibr_sheeting|thatch|concrete|unknown",
-  "roofColour": null or "string",
+  "roofColour": null | "string",
   "storeys": number,
   "fenceType": "palisade|wall|precast|face_brick|none|unknown",
   "garageCount": number,
@@ -71,64 +45,67 @@ Respond with ONLY valid JSON (no markdown, no explanation):
   "landmarks": ["string"],
   "neighbourFeatures": ["string"],
   "quickWins": [{"type": "house_number|street_sign|landmark|sold_board|neighbour_id", "value": "string", "confidence": "high|medium|low"}],
-  "roofOutline": "description of building shape from above",
-  "garagePosition": "left|right|center|detached|unknown",
-  "poolPosition": "back-left|back-right|back-center|front|side|none",
-  "photoClassification": {"frontOfHouse": number, "streetView": number, "exteriorOther": number, "aerial": number, "interior": number},
-  "bestFrontOfHousePhotoIndex": number (1-indexed photo number that best shows the facade, or 0 if none),
-  "locationClues": {
-    "cornerStand": boolean,
-    "nearSchool": boolean,
-    "nearPark": boolean,
-    "nearChurch": boolean,
-    "nearShoppingCentre": boolean,
-    "facing": "north|south|east|west|unknown",
-    "topOfStreet": boolean,
-    "cornerOfStreets": null or "Street1 & Street2",
-    "otherClues": ["string"]
+  "aerial": {
+    "roofShape": "string",
+    "roofColour": null | "string",
+    "poolPresent": boolean,
+    "poolShape": "kidney|rectangle|freeform|round|none|unknown",
+    "poolPosition": null | "string",
+    "standSizeM2": null | number,
+    "drivewayDescription": null | "string",
+    "treeCover": null | "string",
+    "outbuildings": ["string"],
+    "distinctiveAerial": ["string — the few features that would single this stand out from above"],
+    "summary": "one paragraph describing the stand exactly as a satellite would see it"
   },
-  "visibleText": ["list all visible text from photos: signs, numbers, words"]
+  "facade": {
+    "summary": "one paragraph describing the house exactly as Street View would see it from the road",
+    "bestPhotoIndexes": [numbers, 1-indexed, best first, max 3]
+  }
 }`;
 }
 
-export function parseFeatureResponse(responseText: string): PropertyFingerprint {
-  // Strip markdown code blocks if present
-  let jsonStr = responseText.trim();
-  if (jsonStr.startsWith("```")) {
-    jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-  }
-
-  const raw = JSON.parse(jsonStr);
-
+export function normalizeFingerprint(raw: Record<string, unknown>): PropertyFingerprint {
+  const r = raw as any;
   return {
-    houseNumber: raw.houseNumber ?? null,
-    streetClue: raw.streetClue ?? null,
-    exteriorFinish: raw.exteriorFinish ?? "unknown",
-    exteriorColour: raw.exteriorColour ?? null,
-    roofType: raw.roofType ?? "unknown",
-    roofColour: raw.roofColour ?? null,
-    storeys: raw.storeys ?? 1,
-    fenceType: raw.fenceType ?? "unknown",
-    garageCount: raw.garageCount ?? 0,
-    poolShape: raw.poolShape ?? "unknown",
-    drivewayType: raw.drivewayType ?? "unknown",
-    solarPanels: raw.solarPanels ?? false,
-    notableFeatures: raw.notableFeatures ?? [],
-    landmarks: raw.landmarks ?? [],
-    neighbourFeatures: raw.neighbourFeatures ?? [],
-    quickWins: raw.quickWins ?? [],
+    houseNumber: r.houseNumber ?? null,
+    streetClue: r.streetClue ?? null,
+    exteriorFinish: r.exteriorFinish ?? "unknown",
+    exteriorColour: r.exteriorColour ?? null,
+    roofType: r.roofType ?? "unknown",
+    roofColour: r.roofColour ?? null,
+    storeys: r.storeys ?? 1,
+    fenceType: r.fenceType ?? "unknown",
+    garageCount: r.garageCount ?? 0,
+    poolShape: r.poolShape ?? "unknown",
+    drivewayType: r.drivewayType ?? "unknown",
+    solarPanels: r.solarPanels ?? false,
+    notableFeatures: r.notableFeatures ?? [],
+    landmarks: r.landmarks ?? [],
+    neighbourFeatures: r.neighbourFeatures ?? [],
+    quickWins: r.quickWins ?? [],
+    aerial: r.aerial ?? null,
+    facade: r.facade ?? null,
   };
 }
 
-export async function extractFeaturesFromPhotos(
-  photoUrls: string[],
-  listingDescription: string = ""
-): Promise<PropertyFingerprint> {
-  const prompt = buildFeatureExtractionPrompt(listingDescription);
+const MAX_PHOTOS = 20;
 
-  // Send up to 20 photos at once (Claude can handle multiple images)
-  const batch = photoUrls.slice(0, 20);
-  const response = await analyseMultipleImagesWithPrompt(batch, prompt);
+export async function extractFeaturesFromListing(listing: ListingData): Promise<PropertyFingerprint> {
+  const photos = listing.photoUrls.slice(0, MAX_PHOTOS);
+  if (photos.length === 0) {
+    throw new Error("Listing has no photos to analyse");
+  }
 
-  return parseFeatureResponse(response);
+  // URL image sources: Anthropic's servers fetch images.prop24.com directly,
+  // so this works even when the local network blocks that host.
+  const raw = await visionJson<Record<string, unknown>>({
+    model: MODELS.fingerprint,
+    images: photos.map(urlImage),
+    labels: photos.map((_, i) => `Photo ${i + 1}:`),
+    prompt: buildFeatureExtractionPrompt(listing),
+    maxTokens: 4096,
+  });
+
+  return normalizeFingerprint(raw);
 }

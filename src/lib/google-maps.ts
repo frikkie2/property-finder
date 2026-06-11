@@ -28,19 +28,32 @@ type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
 function detectMediaType(buffer: Buffer): ImageMediaType {
   if (buffer[0] === 0x89 && buffer[1] === 0x50) return "image/png";
-  if (buffer[0] === 0xFF && buffer[1] === 0xD8) return "image/jpeg";
+  if (buffer[0] === 0xff && buffer[1] === 0xd8) return "image/jpeg";
   if (buffer[0] === 0x47 && buffer[1] === 0x49) return "image/gif";
   if (buffer[0] === 0x52 && buffer[1] === 0x49) return "image/webp";
-  return "image/png"; // default to png for Google Maps
+  return "image/png";
 }
 
+export interface MapImage {
+  imageBuffer: Buffer;
+  base64: string;
+  mediaType: ImageMediaType;
+  key: string;
+}
+
+/**
+ * Fetch a satellite tile. `scale: 2` returns double-density pixels
+ * (e.g. zoom 18 + scale 2 = zoom-19 detail in a zoom-18 footprint)
+ * at no extra API cost.
+ */
 export async function fetchSatelliteImage(
   lat: number,
   lng: number,
   zoom: number = 19,
-  size: string = "640x640"
-): Promise<{ imageBuffer: Buffer; base64: string; mediaType: ImageMediaType; key: string }> {
-  const key = cacheKey("sat", `${lat},${lng},${zoom},${size}`);
+  size: string = "640x640",
+  scale: 1 | 2 = 1
+): Promise<MapImage> {
+  const key = cacheKey("sat", `${lat.toFixed(6)},${lng.toFixed(6)},${zoom},${size},${scale}`);
   const cached = getCached(key);
   if (cached) {
     return { imageBuffer: cached, base64: cached.toString("base64"), mediaType: detectMediaType(cached), key };
@@ -49,7 +62,7 @@ export async function fetchSatelliteImage(
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   const url =
     `https://maps.googleapis.com/maps/api/staticmap?` +
-    `center=${lat},${lng}&zoom=${zoom}&size=${size}` +
+    `center=${lat},${lng}&zoom=${zoom}&size=${size}&scale=${scale}` +
     `&maptype=satellite&key=${apiKey}`;
 
   const response = await fetch(url);
@@ -63,34 +76,85 @@ export async function fetchSatelliteImage(
   return { imageBuffer: buffer, base64: buffer.toString("base64"), mediaType: detectMediaType(buffer), key };
 }
 
-export async function fetchStreetViewImage(
+export interface StreetViewMeta {
+  panoLat: number;
+  panoLng: number;
+  panoId: string;
+  date: string | null;
+}
+
+/**
+ * Look up the nearest Street View panorama to a location.
+ * Returns null when no coverage exists within the radius.
+ */
+export async function fetchStreetViewMetadata(
   lat: number,
   lng: number,
-  heading: number = 0,
-  size: string = "640x480"
-): Promise<{ imageBuffer: Buffer; base64: string; mediaType: ImageMediaType; key: string } | null> {
-  const key = cacheKey("sv", `${lat},${lng},${heading},${size}`);
+  radius: number = 60
+): Promise<StreetViewMeta | null> {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const url =
+    `https://maps.googleapis.com/maps/api/streetview/metadata?` +
+    `location=${lat},${lng}&radius=${radius}&source=outdoor&key=${apiKey}`;
+
+  const response = await fetch(url);
+  const meta = await response.json();
+  if (meta.status !== "OK" || !meta.location) return null;
+
+  return {
+    panoLat: meta.location.lat,
+    panoLng: meta.location.lng,
+    panoId: meta.pano_id,
+    date: meta.date || null,
+  };
+}
+
+/** Compass bearing in degrees from point A to point B. */
+export function bearingBetween(
+  fromLat: number,
+  fromLng: number,
+  toLat: number,
+  toLng: number
+): number {
+  const φ1 = (fromLat * Math.PI) / 180;
+  const φ2 = (toLat * Math.PI) / 180;
+  const Δλ = ((toLng - fromLng) * Math.PI) / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const θ = Math.atan2(y, x);
+  return ((θ * 180) / Math.PI + 360) % 360;
+}
+
+/**
+ * Fetch a Street View image AIMED AT a target location: finds the nearest
+ * panorama, computes the bearing from the camera to the target, and requests
+ * that heading. (The old code requested fixed compass headings 0/90/180/270,
+ * which mostly photographed random directions and quadrupled cost.)
+ */
+export async function fetchStreetViewAimedAt(
+  targetLat: number,
+  targetLng: number,
+  fov: number = 90
+): Promise<(MapImage & { heading: number; panoDistanceMeters: number; panoDate: string | null }) | null> {
+  const meta = await fetchStreetViewMetadata(targetLat, targetLng);
+  if (!meta) return null;
+
+  const heading = Math.round(bearingBetween(meta.panoLat, meta.panoLng, targetLat, targetLng));
+  const distance = haversineMeters(meta.panoLat, meta.panoLng, targetLat, targetLng);
+
+  const key = cacheKey("svaim", `${meta.panoId},${heading},${fov}`);
   const cached = getCached(key);
   if (cached) {
-    return { imageBuffer: cached, base64: cached.toString("base64"), mediaType: detectMediaType(cached), key };
+    return {
+      imageBuffer: cached, base64: cached.toString("base64"), mediaType: detectMediaType(cached),
+      key, heading, panoDistanceMeters: distance, panoDate: meta.date,
+    };
   }
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-
-  // First check if Street View is available at this location
-  const metaUrl =
-    `https://maps.googleapis.com/maps/api/streetview/metadata?` +
-    `location=${lat},${lng}&key=${apiKey}`;
-
-  const metaResponse = await fetch(metaUrl);
-  const meta = await metaResponse.json();
-
-  if (meta.status !== "OK") return null;
-
   const url =
     `https://maps.googleapis.com/maps/api/streetview?` +
-    `location=${lat},${lng}&heading=${heading}&size=${size}` +
-    `&pitch=0&fov=90&key=${apiKey}`;
+    `pano=${meta.panoId}&heading=${heading}&size=640x480&pitch=0&fov=${fov}&key=${apiKey}`;
 
   const response = await fetch(url);
   if (!response.ok) return null;
@@ -98,29 +162,25 @@ export async function fetchStreetViewImage(
   const buffer = Buffer.from(await response.arrayBuffer());
   setCache(key, buffer);
 
-  return { imageBuffer: buffer, base64: buffer.toString("base64"), mediaType: detectMediaType(buffer), key };
+  return {
+    imageBuffer: buffer, base64: buffer.toString("base64"), mediaType: detectMediaType(buffer),
+    key, heading, panoDistanceMeters: distance, panoDate: meta.date,
+  };
 }
 
-export async function fetchStreetViewMultipleAngles(
-  lat: number,
-  lng: number
-): Promise<{ heading: number; base64: string; mediaType: ImageMediaType; key: string }[]> {
-  const headings = [0, 90, 180, 270];
-  const results: { heading: number; base64: string; mediaType: ImageMediaType; key: string }[] = [];
-
-  for (const heading of headings) {
-    const image = await fetchStreetViewImage(lat, lng, heading);
-    if (image) {
-      results.push({ heading, base64: image.base64, mediaType: image.mediaType, key: image.key });
-    }
-  }
-
-  return results;
+export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 export async function geocodeAddress(
   address: string
-): Promise<{ lat: number; lng: number } | null> {
+): Promise<{ lat: number; lng: number; formattedAddress: string; precise: boolean } | null> {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   const url =
     `https://maps.googleapis.com/maps/api/geocode/json?` +
@@ -128,25 +188,27 @@ export async function geocodeAddress(
 
   const response = await fetch(url);
   const data = await response.json();
-
   if (data.status !== "OK" || !data.results.length) return null;
 
-  const loc = data.results[0].geometry.location;
-  return { lat: loc.lat, lng: loc.lng };
+  const result = data.results[0];
+  const loc = result.geometry.location;
+  return {
+    lat: loc.lat,
+    lng: loc.lng,
+    formattedAddress: result.formatted_address,
+    precise: result.geometry.location_type === "ROOFTOP" || result.types.includes("street_address"),
+  };
 }
 
-export async function reverseGeocode(
-  lat: number,
-  lng: number
-): Promise<string | null> {
+/** Reverse geocode to the nearest street address. */
+export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   const url =
     `https://maps.googleapis.com/maps/api/geocode/json?` +
-    `latlng=${lat},${lng}&key=${apiKey}`;
+    `latlng=${lat},${lng}&result_type=street_address|premise&key=${apiKey}`;
 
   const response = await fetch(url);
   const data = await response.json();
-
   if (data.status !== "OK" || !data.results.length) return null;
   return data.results[0].formatted_address;
 }

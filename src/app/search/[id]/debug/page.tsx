@@ -10,16 +10,16 @@ interface PipelineEvent {
 }
 
 interface BuildingData {
-  id: number;
   center: { latitude: number; longitude: number };
   address: string | null;
-  polygon: { lat: number; lng: number }[];
-  areaMeters2: number;
   score: number;
+  aerialScore?: number;
+  streetScore?: number;
   reasoning: string;
   matchingFeatures: string[];
   differences: string[];
-  streetViewImageUrl: string;
+  streetViewImageUrl: string | null;
+  satelliteImageUrl?: string | null;
 }
 
 export default function DebugPage() {
@@ -43,7 +43,7 @@ export default function DebugPage() {
   const buildings: BuildingData[] = data.buildingsFound || [];
   const displayBuildings = buildingFilter === "top" ? buildings.slice(0, 30) : buildings;
 
-  const frontIdx = fingerprint.bestFrontOfHousePhotoIndex;
+  const frontIdx = fingerprint.facade?.bestPhotoIndexes?.[0];
   const frontPhotoUrl = frontIdx && frontIdx > 0 && listing.photoUrls ? listing.photoUrls[frontIdx - 1] : listing.photoUrls?.[0];
 
   return (
@@ -160,14 +160,16 @@ export default function DebugPage() {
         ) : (
           <div className="space-y-4">
             {displayBuildings.map((b, i) => (
-              <div key={b.id || i} className="border border-gray-200 rounded p-3">
+              <div key={i} className="border border-gray-200 rounded p-3">
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <p className="font-semibold text-sm">
                       #{i + 1} · {b.address || `${b.center.latitude.toFixed(6)}, ${b.center.longitude.toFixed(6)}`}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {Math.round(b.areaMeters2)}m² footprint
+                      {b.aerialScore !== undefined ? `aerial ${b.aerialScore}%` : ""}
+                      {b.streetScore !== undefined && b.streetScore >= 0 ? ` · street ${b.streetScore}%` : ""}
+                      {b.streetScore !== undefined && b.streetScore < 0 ? " · no Street View coverage" : ""}
                     </p>
                   </div>
                   <span
@@ -183,7 +185,7 @@ export default function DebugPage() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <div>
                     <div className="text-[10px] text-gray-500 uppercase mb-1">Listing</div>
                     <img
@@ -194,11 +196,31 @@ export default function DebugPage() {
                   </div>
                   <div>
                     <div className="text-[10px] text-gray-500 uppercase mb-1">Street View</div>
-                    <img
-                      src={b.streetViewImageUrl}
-                      alt="Street View"
-                      className="w-full aspect-video object-cover rounded border border-yellow-300"
-                    />
+                    {b.streetViewImageUrl ? (
+                      <img
+                        src={b.streetViewImageUrl}
+                        alt="Street View"
+                        className="w-full aspect-video object-cover rounded border border-yellow-300"
+                      />
+                    ) : (
+                      <div className="w-full aspect-video rounded border border-dashed border-gray-300 flex items-center justify-center text-[10px] text-gray-400">
+                        no coverage
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-gray-500 uppercase mb-1">Satellite</div>
+                    {b.satelliteImageUrl ? (
+                      <img
+                        src={b.satelliteImageUrl}
+                        alt="Satellite"
+                        className="w-full aspect-video object-cover rounded border border-green-300"
+                      />
+                    ) : (
+                      <div className="w-full aspect-video rounded border border-dashed border-gray-300 flex items-center justify-center text-[10px] text-gray-400">
+                        —
+                      </div>
+                    )}
                   </div>
                 </div>
 
