@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { geocodeAddress, fetchStreetViewHeadings, fetchSatelliteImage, haversineMeters } from "./google-maps";
+import { geocodeAddress, fetchStreetViewHeadings, fetchSatelliteImage, haversineMeters, reverseGeocodeStreet } from "./google-maps";
+import { resolveSuburbBounds } from "./suburb-data";
 import { MODELS, base64Image, listingImage, mapWithConcurrency, visionJson, type ImageInput } from "./claude";
 import type { ListingData, PropertyFingerprint } from "./types";
 
@@ -105,15 +106,16 @@ interface FacadeReply {
 export async function buildStreetIndex(
   street: string,
   suburb: string,
-  opts: { maxNumber?: number; onProgress?: (done: number, total: number, kept: number) => void } = {}
+  opts: { minNumber?: number; maxNumber?: number; onProgress?: (done: number, total: number, kept: number) => void } = {}
 ): Promise<StreetIndex> {
+  const minNumber = Math.max(1, opts.minNumber ?? 1);
   const maxNumber = opts.maxNumber ?? 400;
   const slug = streetSlug(street, suburb);
   const streetLc = street.toLowerCase().replace(/\bst\b|\bstreet\b|\bave\b|\bavenue\b/g, "").trim();
 
   // 1) Enumerate candidate addresses (both sides of the street).
   const numbers: number[] = [];
-  for (let n = 1; n <= maxNumber; n++) numbers.push(n);
+  for (let n = minNumber; n <= maxNumber; n++) numbers.push(n);
 
   // 2) Geocode each, keep those that land on the target street with a pano.
   const seen: { lat: number; lng: number }[] = [];
@@ -207,6 +209,91 @@ Respond ONLY with JSON:
   fs.mkdirSync(INDEX_DIR, { recursive: true });
   fs.writeFileSync(path.join(INDEX_DIR, `${slug}.json`), JSON.stringify(index, null, 2));
   return index;
+}
+
+// --- Suburb-wide indexing ---
+
+export interface SuburbStreet {
+  street: string;
+  minNumber: number;
+  maxNumber: number;
+  hits: number;
+}
+
+/**
+ * Discover the streets in a suburb (and the house-number range present on each)
+ * via a coarse reverse-geocode grid over the suburb's bounding box.
+ */
+export async function discoverStreets(suburb: string, stepMeters = 60): Promise<SuburbStreet[]> {
+  const b = await resolveSuburbBounds(suburb);
+  const midLat = (b.north + b.south) / 2;
+  const latStep = stepMeters / 111_320;
+  const lngStep = stepMeters / (111_320 * Math.cos((midLat * Math.PI) / 180));
+
+  const points: { lat: number; lng: number }[] = [];
+  for (let lat = b.south; lat <= b.north; lat += latStep)
+    for (let lng = b.west; lng <= b.east; lng += lngStep) points.push({ lat, lng });
+
+  const suburbLc = suburb.toLowerCase();
+  const streets = new Map<string, { min: number; max: number; hits: number }>();
+
+  await mapWithConcurrency(points, 8, async (p) => {
+    const r = await reverseGeocodeStreet(p.lat, p.lng);
+    if (!r?.route) return;
+    // keep only points whose sublocality matches the suburb (when present)
+    if (r.suburb && r.suburb.toLowerCase() !== suburbLc) return;
+    const cur = streets.get(r.route) ?? { min: Infinity, max: 0, hits: 0 };
+    cur.hits++;
+    if (r.streetNumber != null) {
+      cur.min = Math.min(cur.min, r.streetNumber);
+      cur.max = Math.max(cur.max, r.streetNumber);
+    }
+    streets.set(r.route, cur);
+  });
+
+  return [...streets.entries()]
+    .map(([street, v]) => ({
+      street,
+      minNumber: Number.isFinite(v.min) ? v.min : 1,
+      maxNumber: v.max || 300,
+      hits: v.hits,
+    }))
+    // drop spurious one-off hits (likely bordering streets clipped by the bbox)
+    .filter((s) => s.hits >= 1)
+    .sort((a, b) => b.hits - a.hits);
+}
+
+/**
+ * Index every street in a suburb. Each street is saved as its own
+ * <street-suburb>.json, so the suburb becomes searchable via listStreetIndexes.
+ */
+export async function buildSuburbIndex(
+  suburb: string,
+  opts: {
+    onProgress?: (info: { phase: string; streetsDone: number; streetsTotal: number; housesKept: number; currentStreet?: string }) => void;
+  } = {}
+): Promise<{ streets: number; houses: number }> {
+  opts.onProgress?.({ phase: "discovering streets", streetsDone: 0, streetsTotal: 0, housesKept: 0 });
+  const discovered = await discoverStreets(suburb);
+  opts.onProgress?.({ phase: "indexing", streetsDone: 0, streetsTotal: discovered.length, housesKept: 0 });
+
+  let housesKept = 0;
+  let streetsDone = 0;
+  for (const s of discovered) {
+    try {
+      const ix = await buildStreetIndex(s.street, suburb, {
+        minNumber: Math.max(1, s.minNumber - 15),
+        maxNumber: s.maxNumber + 15,
+      });
+      housesKept += ix.houseCount;
+    } catch (err) {
+      console.warn(`[SUBURB] ${s.street} failed: ${(err as Error).message}`);
+    }
+    streetsDone++;
+    opts.onProgress?.({ phase: "indexing", streetsDone, streetsTotal: discovered.length, housesKept, currentStreet: s.street });
+  }
+
+  return { streets: streetsDone, houses: housesKept };
 }
 
 // --- Matching uploaded/listing photos against an index ---

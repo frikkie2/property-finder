@@ -259,3 +259,36 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
   if (data.status !== "OK" || !data.results.length) return null;
   return data.results[0].formatted_address;
 }
+
+export interface ReverseStreet {
+  route: string | null;        // e.g. "Kent Road"
+  streetNumber: number | null; // e.g. 243
+  suburb: string | null;       // sublocality
+}
+
+/**
+ * Reverse geocode returning structured street components — used to discover
+ * the streets (and house-number ranges) present in a suburb.
+ */
+export async function reverseGeocodeStreet(lat: number, lng: number): Promise<ReverseStreet | null> {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const url =
+    `https://maps.googleapis.com/maps/api/geocode/json?` +
+    `latlng=${lat},${lng}&result_type=street_address|premise|route&key=${apiKey}`;
+  const response = await fetch(url);
+  const data = await response.json();
+  if (data.status !== "OK" || !data.results.length) return null;
+
+  // Prefer a result that has a route component.
+  for (const result of data.results) {
+    const comps: { long_name: string; types: string[] }[] = result.address_components || [];
+    const route = comps.find((c) => c.types.includes("route"))?.long_name ?? null;
+    if (!route) continue;
+    const numStr = comps.find((c) => c.types.includes("street_number"))?.long_name ?? null;
+    const suburb =
+      comps.find((c) => c.types.includes("sublocality") || c.types.includes("neighborhood"))?.long_name ?? null;
+    const n = numStr ? parseInt(numStr.replace(/[^0-9]/g, ""), 10) : null;
+    return { route, streetNumber: Number.isNaN(n as number) ? null : n, suburb };
+  }
+  return null;
+}
