@@ -10,7 +10,9 @@ interface HistoryItem {
   listed_suburb: string | null;
   status: SearchStatus;
   created_at: string;
-  candidate_count?: number;
+  confirmed_address?: string | null;
+  best_address?: string | null;
+  best_score?: number | null;
 }
 
 function StatusBadge({ status }: { status: SearchStatus }) {
@@ -65,14 +67,16 @@ export default function SearchHistory() {
   }
 
   return (
-    <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white overflow-hidden">
+    <ul className="divide-y divide-line rounded-xl border border-line bg-card overflow-hidden">
       {history.map((item) => {
         const date = new Date(item.created_at).toLocaleDateString("en-ZA", {
           day: "numeric",
           month: "short",
           year: "numeric",
         });
-        const shortUrl = item.property24_url.replace(/^https?:\/\/(www\.)?/, "").slice(0, 60);
+        const isManual = item.property24_url === "manual-upload";
+        const shortUrl = isManual ? "Uploaded photos" : item.property24_url.replace(/^https?:\/\/(www\.)?/, "").slice(0, 60);
+        const cleanAddr = (a: string) => a.replace(/, South Africa$/, "");
         return (
           <li key={item.id}>
             <Link
@@ -81,12 +85,27 @@ export default function SearchHistory() {
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-gray-900">{shortUrl}</p>
-                <p className="text-xs text-gray-500">
+                {item.confirmed_address ? (
+                  <p className="truncate text-xs font-semibold text-green-700 mt-0.5">
+                    ✓ {cleanAddr(item.confirmed_address)}
+                  </p>
+                ) : item.status === "complete" && item.best_address ? (
+                  <p className="truncate text-xs text-blue-700 mt-0.5">
+                    Best match: {cleanAddr(item.best_address)}{item.best_score != null ? ` (${item.best_score}%)` : ""}
+                  </p>
+                ) : null}
+                <p className="text-xs text-gray-500 mt-0.5">
                   {item.listed_suburb ? `${item.listed_suburb} · ` : ""}
                   {date}
                 </p>
               </div>
-              <StatusBadge status={item.status} />
+              {item.confirmed_address ? (
+                <span className="inline-flex items-center rounded-full bg-green-600 px-2.5 py-0.5 text-xs font-semibold text-white">
+                  Confirmed
+                </span>
+              ) : (
+                <StatusBadge status={item.status} />
+              )}
             </Link>
           </li>
         );

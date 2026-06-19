@@ -47,9 +47,6 @@ export default function SearchInput() {
 
   return (
     <div className="w-full">
-      <label htmlFor="property-url" className="block text-sm font-medium text-gray-700 mb-1">
-        Property24 listing URL
-      </label>
       <div className="flex gap-2">
         <input
           id="property-url"
@@ -57,14 +54,14 @@ export default function SearchInput() {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="https://www.property24.com/for-sale/..."
-          className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 focus:border-blue-700 disabled:bg-gray-100"
+          placeholder="https://www.property24.com/for-sale/…"
+          className="flex-1 rounded-lg border border-line bg-paper/50 px-3.5 py-2 text-sm text-ink placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-clay/40 focus:border-clay disabled:opacity-60"
           disabled={loading}
         />
         <button
           onClick={handleSearch}
           disabled={loading}
-          className="rounded-lg bg-blue-700 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          className="rounded-lg bg-clay px-5 py-2 text-sm font-semibold text-card hover:bg-clay-dark disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? "Searching…" : "Search"}
         </button>
@@ -72,9 +69,7 @@ export default function SearchInput() {
       <div className="mt-3">
         <SuburbSelect selected={suburbs} onChange={setSuburbs} />
       </div>
-      {error && (
-        <p className="mt-2 text-sm text-red-600">{error}</p>
-      )}
+      {error && <p className="mt-2 text-sm text-clay">{error}</p>}
     </div>
   );
 }

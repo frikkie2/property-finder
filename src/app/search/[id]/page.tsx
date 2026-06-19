@@ -284,19 +284,11 @@ export default function SearchPage() {
           {/* Candidate selector when multiple */}
           {activeCandidates.length > 1 && (
             <section>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-                Candidates ({activeCandidates.length})
-              </p>
+              <p className="data-label mb-2">Ranked candidates ({activeCandidates.length}) — tap to compare</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {activeCandidates.map((c, i) => (
-                  <button
-                    key={c.id}
-                    onClick={() => setSelectedCandidate(i)}
-                    className={`text-left transition-all rounded-lg ${
-                      i === selectedCandidate ? "ring-2 ring-blue-700" : ""
-                    }`}
-                  >
-                    <CandidateCard candidate={c} rank={i + 1} />
+                  <button key={c.id} onClick={() => setSelectedCandidate(i)} className="text-left">
+                    <CandidateCard candidate={c} rank={i + 1} selected={i === selectedCandidate} />
                   </button>
                 ))}
               </div>

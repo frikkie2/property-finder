@@ -214,7 +214,21 @@ export function updateCandidateStatus(
 
 export function getSearchHistory(limit: number = 20) {
   const db = getDb();
-  return db
+  const searches = db
     .prepare(`SELECT * FROM searches ORDER BY created_at DESC LIMIT ?`)
     .all(limit) as any[];
+  // Attach the confirmed address (if the user locked one in) and the current
+  // best candidate, so the dashboard can clearly mark the identified property.
+  for (const s of searches) {
+    const confirmed = db
+      .prepare(`SELECT address FROM candidates WHERE search_id = ? AND status = 'confirmed' ORDER BY confirmed_at DESC LIMIT 1`)
+      .get(s.id) as { address: string } | undefined;
+    const best = db
+      .prepare(`SELECT address, confidence_score FROM candidates WHERE search_id = ? ORDER BY confidence_score DESC LIMIT 1`)
+      .get(s.id) as { address: string; confidence_score: number } | undefined;
+    s.confirmed_address = confirmed?.address ?? null;
+    s.best_address = best?.address ?? null;
+    s.best_score = best?.confidence_score ?? null;
+  }
+  return searches;
 }

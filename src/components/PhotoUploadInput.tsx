@@ -84,7 +84,7 @@ export default function PhotoUploadInput() {
         onClick={() => inputRef.current?.click()}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
-        className="cursor-pointer rounded-lg border-2 border-dashed border-gray-300 hover:border-blue-500 bg-gray-50 px-4 py-6 text-center text-sm text-gray-600"
+        className="cursor-pointer rounded-lg border-2 border-dashed border-line hover:border-clay/50 bg-paper/40 px-4 py-6 text-center text-sm text-muted transition-colors"
       >
         <input
           ref={inputRef}
@@ -94,8 +94,8 @@ export default function PhotoUploadInput() {
           className="hidden"
           onChange={(e) => addFiles(e.target.files)}
         />
-        <p className="font-medium text-gray-700">Drop property photos here, or click to choose</p>
-        <p className="text-xs text-gray-400 mt-1">Exterior / facade / street shots work best. Up to 30 images.</p>
+        <p className="font-medium text-ink">Drop property photos here, or click to choose</p>
+        <p className="text-xs text-muted mt-1">Exterior / facade / street shots work best — but interior shots help too. Up to 30 images.</p>
       </div>
 
       {previews.length > 0 && (
@@ -121,18 +121,18 @@ export default function PhotoUploadInput() {
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Optional: paste the listing description (helps matching)"
-        className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
+        className="rounded-lg border border-line bg-paper/50 px-3.5 py-2 text-sm text-ink placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-clay/40 focus:border-clay"
       />
 
       <button
         onClick={handleSubmit}
         disabled={loading}
-        className="self-start rounded-lg bg-blue-700 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+        className="self-start rounded-lg bg-clay px-5 py-2 text-sm font-semibold text-card hover:bg-clay-dark disabled:opacity-60"
       >
         {loading ? "Uploading…" : "Find this property"}
       </button>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-clay">{error}</p>}
     </div>
   );
 }

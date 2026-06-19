@@ -28,7 +28,7 @@ export default function MapView({ candidates, origin = "Pretoria+East,+Gauteng" 
   const mapsUrl = `https://www.google.com/maps/dir/${encodeURIComponent(origin)}/${waypoints}`;
 
   const streetviewUrl = (c: Waypoint) =>
-    `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${c.lat},${c.lng}`;
+    `https://www.google.com/maps?q=&layer=c&cbll=${c.lat},${c.lng}`;
 
   // Center the map on the first candidate
   const centerLat = candidates.reduce((s, c) => s + c.lat, 0) / candidates.length;

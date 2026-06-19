@@ -3,54 +3,38 @@ import type { Candidate } from "@/lib/types";
 interface Props {
   candidate: Candidate;
   rank: number;
+  selected?: boolean;
 }
 
-function ConfidenceBadge({ level, score }: { level: Candidate["confidenceLevel"]; score: number }) {
-  const colours: Record<string, string> = {
-    high: "bg-green-100 text-green-800",
-    medium: "bg-yellow-100 text-yellow-800",
-    low: "bg-red-100 text-red-800",
-  };
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${colours[level] ?? colours.low}`}>
-      {Math.round(score)}% {level}
-    </span>
-  );
-}
-
-export default function CandidateCard({ candidate, rank }: Props) {
-  // Scores are 0-100 already.
+export default function CandidateCard({ candidate, rank, selected }: Props) {
   const svPct = Math.round(candidate.streetviewMatchScore);
   const satPct = Math.round(candidate.satelliteMatchScore);
-  const featureMatches = candidate.featureMatches ?? [];
-  const matchedCount = featureMatches.filter((f) => f.matched).length;
-  const totalCount = featureMatches.length;
+  const confirmed = candidate.status === "confirmed";
+  const dot =
+    candidate.confidenceLevel === "high" ? "#2f6b4f"
+    : candidate.confidenceLevel === "medium" ? "#b8791f"
+    : "#a8442a";
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 flex flex-col gap-3">
+    <div
+      className={`rounded-lg border bg-card p-3.5 flex flex-col gap-2 transition ${
+        selected ? "border-clay ring-1 ring-clay/30" : "border-line hover:border-clay/40"
+      }`}
+    >
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <span className="text-xs font-bold text-blue-700 uppercase tracking-wide">
-            #{rank}
-          </span>
-          <h3 className="text-sm font-semibold text-gray-900 mt-0.5">{candidate.address}</h3>
+        <div className="min-w-0">
+          <span className="font-mono text-[11px] text-muted">#{rank}{confirmed ? " · ✓ confirmed" : ""}</span>
+          <h3 className="font-mono text-[13px] text-ink mt-0.5 leading-snug break-words">{candidate.address}</h3>
         </div>
-        <ConfidenceBadge level={candidate.confidenceLevel} score={candidate.confidenceScore} />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="h-2 w-2 rounded-full" style={{ background: dot }} />
+          <span className="font-display text-lg text-ink leading-none">{candidate.confidenceScore}%</span>
+        </div>
       </div>
-      <div className="flex gap-4 text-xs text-gray-600">
-        <span>
-          Street view: <strong className="text-gray-800">{svPct}%</strong>
-        </span>
-        <span>
-          Satellite: <strong className="text-gray-800">{satPct}%</strong>
-        </span>
-        <span>
-          Features: <strong className="text-gray-800">{matchedCount}/{totalCount}</strong>
-        </span>
+      <div className="flex gap-3 data-label">
+        <span>street <strong className="text-ink font-mono">{svPct}</strong></span>
+        <span>aerial <strong className="text-ink font-mono">{satPct}</strong></span>
       </div>
-      {candidate.aiExplanation && (
-        <p className="text-xs text-gray-600 line-clamp-2">{candidate.aiExplanation}</p>
-      )}
     </div>
   );
 }

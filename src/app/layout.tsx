@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Property Finder",
-  description: "Find the real address behind a Property24 listing",
+  title: "Property Finder — field dossier",
+  description: "Identify the real address behind a property listing",
 };
 
 export default function RootLayout({
@@ -27,14 +27,19 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-gray-50">
-        <header className="bg-blue-700 shadow-sm">
-          <div className="mx-auto max-w-4xl px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-            <h1 className="text-xl font-bold text-white tracking-tight">Property Finder</h1>
-            <p className="text-sm text-blue-200">Pretoria East &middot; 12 suburbs</p>
+      <body className="min-h-full flex flex-col">
+        <header className="border-b border-line bg-card/70 backdrop-blur-sm sticky top-0 z-30">
+          <div className="mx-auto max-w-5xl px-5 py-3 flex items-center justify-between gap-3">
+            <a href="/" className="flex items-baseline gap-2.5 group">
+              <span className="flex h-7 w-7 items-center justify-center rounded-sm bg-clay text-card text-sm font-bold shadow-sm">P</span>
+              <span className="font-display text-xl text-ink tracking-tight group-hover:text-clay transition-colors">
+                Property Finder
+              </span>
+            </a>
+            <span className="data-label hidden sm:block">Pretoria · address identification</span>
           </div>
         </header>
-        <main className="flex-1 mx-auto w-full max-w-4xl px-4 py-8">{children}</main>
+        <main className="flex-1 mx-auto w-full max-w-5xl px-5 py-8">{children}</main>
       </body>
     </html>
   );

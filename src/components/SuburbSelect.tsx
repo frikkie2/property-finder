@@ -48,7 +48,7 @@ export default function SuburbSelect({
 
   if (loaded && options.length === 0) {
     return (
-      <p className="text-xs text-amber-600">
+      <p className="text-xs text-amber">
         No suburbs indexed yet — decode a street first, then it will appear here to search against.
       </p>
     );
@@ -56,7 +56,7 @@ export default function SuburbSelect({
 
   return (
     <div>
-      <p className="text-xs font-medium text-gray-600 mb-1">Search in suburb(s):</p>
+      <p className="data-label mb-1.5">Search in suburb(s)</p>
       <div className="flex flex-wrap gap-2">
         {options.map((o) => {
           const on = selected.includes(o.suburb);
@@ -65,14 +65,14 @@ export default function SuburbSelect({
               key={o.suburb}
               type="button"
               onClick={() => toggle(o.suburb)}
-              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                 on
-                  ? "border-blue-700 bg-blue-700 text-white"
-                  : "border-gray-300 bg-white text-gray-700 hover:border-blue-400"
+                  ? "border-clay bg-clay text-card"
+                  : "border-line bg-card text-ink hover:border-clay/50"
               }`}
               title={`${o.streets.join(", ")} — ${o.houses} houses`}
             >
-              {o.suburb} ({o.houses})
+              {o.suburb} <span className="font-mono opacity-70">({o.houses})</span>
             </button>
           );
         })}

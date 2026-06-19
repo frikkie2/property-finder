@@ -261,7 +261,7 @@ export default function DebugPage() {
                     Map &#8599;
                   </a>
                   <a
-                    href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${b.center.latitude},${b.center.longitude}`}
+                    href={`https://www.google.com/maps?q=&layer=c&cbll=${b.center.latitude},${b.center.longitude}`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-blue-700 hover:underline"
