@@ -117,6 +117,9 @@ export async function runManualPhotoSearch(
         ]),
         aiExplanation: m.reasoning,
         streetviewImageUrl: `/api/images/${m.house.svKey}`,
+        streetviewImageUrls: JSON.stringify(
+          (m.house.svKeys?.length ? m.house.svKeys.map((s) => s.key) : [m.house.svKey]).map((k) => `/api/images/${k}`)
+        ),
         satelliteImageUrl: satKey ? `/api/images/${satKey}` : null,
       });
     }

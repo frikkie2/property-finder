@@ -1,0 +1,209 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - link "P Property Finder" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]: P
+        - generic [ref=e6]: Property Finder
+      - generic [ref=e7]: Pretoria · address identification
+  - main [ref=e8]:
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - paragraph [ref=e27]: Reverse address identification
+        - heading "Find the real address behind a property listing." [level=1] [ref=e28]
+        - paragraph [ref=e29]: Give us a listing link or just the photos. We read the exterior — facade, walls, gate, pool, trees, the view to the street — and match it house-by-house against decoded Street View and satellite imagery to rank the most likely addresses.
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e33]: 01 — by link
+          - heading "Paste a Property24 URL" [level=2] [ref=e34]
+          - paragraph [ref=e35]: We scrape the listing's photos and match them against your indexed suburbs.
+          - generic [ref=e36]:
+            - generic [ref=e37]:
+              - textbox "https://www.property24.com/for-sale/…" [ref=e38]
+              - button "Search" [ref=e39]
+            - generic [ref=e41]:
+              - paragraph [ref=e42]: Search in suburb(s)
+              - generic [ref=e43]:
+                - button "East Lynne (13)" [ref=e44]:
+                  - text: East Lynne
+                  - generic [ref=e45]: (13)
+                - button "Meyerspark (53)" [ref=e46]:
+                  - text: Meyerspark
+                  - generic [ref=e47]: (53)
+                - button "Rietondale (492)" [ref=e48]:
+                  - text: Rietondale
+                  - generic [ref=e49]: (492)
+        - generic [ref=e50]:
+          - generic [ref=e52]: 02 — by photos
+          - heading "Upload photos directly" [level=2] [ref=e53]
+          - paragraph [ref=e54]: No link needed — even mostly-interior shots work; we mine every exterior fragment.
+          - generic [ref=e55]:
+            - generic [ref=e56] [cursor=pointer]:
+              - paragraph [ref=e57]: Drop property photos here, or click to choose
+              - paragraph [ref=e58]: Exterior / facade / street shots work best — but interior shots help too. Up to 30 images.
+            - generic [ref=e59]:
+              - paragraph [ref=e60]: Search in suburb(s)
+              - generic [ref=e61]:
+                - button "East Lynne (13)" [ref=e62]:
+                  - text: East Lynne
+                  - generic [ref=e63]: (13)
+                - button "Meyerspark (53)" [ref=e64]:
+                  - text: Meyerspark
+                  - generic [ref=e65]: (53)
+                - button "Rietondale (492)" [ref=e66]:
+                  - text: Rietondale
+                  - generic [ref=e67]: (492)
+            - 'textbox "Optional: paste the listing description (helps matching)" [ref=e68]'
+            - button "Find this property" [ref=e69]
+      - generic [ref=e70]:
+        - heading "Recent identifications" [level=2] [ref=e71]
+        - list [ref=e72]:
+          - listitem [ref=e73]:
+            - link "property24.com/for-sale/rietondale/pretoria/gauteng/324/1167 ✓ Eben Roux St, Rietondale, Pretoria, 0084, South Africa — Google no. ~232 (estimate) Rietondale · 19 Jun 2026 Confirmed" [ref=e74] [cursor=pointer]:
+              - /url: /search/bac4f5ef-6e5a-48bd-9e82-a89e0e9e420d
+              - generic [ref=e75]:
+                - paragraph [ref=e76]: property24.com/for-sale/rietondale/pretoria/gauteng/324/1167
+                - paragraph [ref=e77]: ✓ Eben Roux St, Rietondale, Pretoria, 0084, South Africa — Google no. ~232 (estimate)
+                - paragraph [ref=e78]: Rietondale · 19 Jun 2026
+              - generic [ref=e79]: Confirmed
+          - listitem [ref=e80]:
+            - 'link "Uploaded photos Best match: Kent Road, Meyerspark, Pretoria, 0103, South Africa — Google no. ~315 (estimate) (83%) Meyerspark · 19 Jun 2026 Complete" [ref=e81] [cursor=pointer]':
+              - /url: /search/2c36f179-8141-4677-8c5a-33907dface0d
+              - generic [ref=e82]:
+                - paragraph [ref=e83]: Uploaded photos
+                - paragraph [ref=e84]: "Best match: Kent Road, Meyerspark, Pretoria, 0103, South Africa — Google no. ~315 (estimate) (83%)"
+                - paragraph [ref=e85]: Meyerspark · 19 Jun 2026
+              - generic [ref=e86]: Complete
+          - listitem [ref=e87]:
+            - 'link "Uploaded photos Best match: Kent Road, Meyerspark, Pretoria, 0103, South Africa — Google no. ~261 (estimate) · confirmed on site: 261 (82%) Meyerspark · 19 Jun 2026 Complete" [ref=e88] [cursor=pointer]':
+              - /url: /search/99179612-f94c-4188-9309-4fb3170a7d1b
+              - generic [ref=e89]:
+                - paragraph [ref=e90]: Uploaded photos
+                - paragraph [ref=e91]: "Best match: Kent Road, Meyerspark, Pretoria, 0103, South Africa — Google no. ~261 (estimate) · confirmed on site: 261 (82%)"
+                - paragraph [ref=e92]: Meyerspark · 19 Jun 2026
+              - generic [ref=e93]: Complete
+          - listitem [ref=e94]:
+            - link "property24.com/for-sale/east-lynne/pretoria/gauteng/2997/117 East Lynne · 19 Jun 2026 Failed" [ref=e95] [cursor=pointer]:
+              - /url: /search/0b23fba6-350d-4edb-b8fb-73b8cf06b3a5
+              - generic [ref=e96]:
+                - paragraph [ref=e97]: property24.com/for-sale/east-lynne/pretoria/gauteng/2997/117
+                - paragraph [ref=e98]: East Lynne · 19 Jun 2026
+              - generic [ref=e99]: Failed
+          - listitem [ref=e100]:
+            - 'link "Uploaded photos Best match: Van Der Westhuizen St, East Lynne, Pretoria, 0186, South Africa — Google no. ~120 (estimate) (78%) East Lynne · 19 Jun 2026 Complete" [ref=e101] [cursor=pointer]':
+              - /url: /search/541d5d71-f920-4481-825c-624defd90e47
+              - generic [ref=e102]:
+                - paragraph [ref=e103]: Uploaded photos
+                - paragraph [ref=e104]: "Best match: Van Der Westhuizen St, East Lynne, Pretoria, 0186, South Africa — Google no. ~120 (estimate) (78%)"
+                - paragraph [ref=e105]: East Lynne · 19 Jun 2026
+              - generic [ref=e106]: Complete
+          - listitem [ref=e107]:
+            - link "Uploaded photos East Lynne · 19 Jun 2026 Failed" [ref=e108] [cursor=pointer]:
+              - /url: /search/5479b1d5-ce07-46cd-95d0-34922854ced7
+              - generic [ref=e109]:
+                - paragraph [ref=e110]: Uploaded photos
+                - paragraph [ref=e111]: East Lynne · 19 Jun 2026
+              - generic [ref=e112]: Failed
+          - listitem [ref=e113]:
+            - link "Uploaded photos East Lynne · 19 Jun 2026 Failed" [ref=e114] [cursor=pointer]:
+              - /url: /search/26c34d73-115b-4559-9cfb-063a93006080
+              - generic [ref=e115]:
+                - paragraph [ref=e116]: Uploaded photos
+                - paragraph [ref=e117]: East Lynne · 19 Jun 2026
+              - generic [ref=e118]: Failed
+          - listitem [ref=e119]:
+            - 'link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1173 Best match: 66 Marili Ave, Val-De-Grace, Pretoria, 0184 (68%) Silverton · 19 Jun 2026 Complete" [ref=e120] [cursor=pointer]':
+              - /url: /search/12987098-fc31-4fdb-886e-8731db9f6bf0
+              - generic [ref=e121]:
+                - paragraph [ref=e122]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1173
+                - paragraph [ref=e123]: "Best match: 66 Marili Ave, Val-De-Grace, Pretoria, 0184 (68%)"
+                - paragraph [ref=e124]: Silverton · 19 Jun 2026
+              - generic [ref=e125]: Complete
+          - listitem [ref=e126]:
+            - link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1173 Silverton · 19 Jun 2026 Failed" [ref=e127] [cursor=pointer]:
+              - /url: /search/99d66d71-f3da-4d30-83ba-2f583f8b74e9
+              - generic [ref=e128]:
+                - paragraph [ref=e129]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1173
+                - paragraph [ref=e130]: Silverton · 19 Jun 2026
+              - generic [ref=e131]: Failed
+          - listitem [ref=e132]:
+            - 'link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1170 Best match: 238 Erasmus St, Meyerspark, Pretoria, 0103 (68%) Silverton · 11 Jun 2026 Complete" [ref=e133] [cursor=pointer]':
+              - /url: /search/a8529ea7-8d9a-4a72-9401-f53dd6ab94f7
+              - generic [ref=e134]:
+                - paragraph [ref=e135]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1170
+                - paragraph [ref=e136]: "Best match: 238 Erasmus St, Meyerspark, Pretoria, 0103 (68%)"
+                - paragraph [ref=e137]: Silverton · 11 Jun 2026
+              - generic [ref=e138]: Complete
+          - listitem [ref=e139]:
+            - link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1170 Silverton · 11 Jun 2026 In progress" [ref=e140] [cursor=pointer]:
+              - /url: /search/d89ba6dd-65c2-4a2a-a12a-3942f246d378
+              - generic [ref=e141]:
+                - paragraph [ref=e142]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1170
+                - paragraph [ref=e143]: Silverton · 11 Jun 2026
+              - generic [ref=e144]: In progress
+          - listitem [ref=e145]:
+            - link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1170 Silverton · 20 Apr 2026 Failed" [ref=e146] [cursor=pointer]:
+              - /url: /search/699af0a4-6b9b-4710-bab3-b999ae7d0b58
+              - generic [ref=e147]:
+                - paragraph [ref=e148]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1170
+                - paragraph [ref=e149]: Silverton · 20 Apr 2026
+              - generic [ref=e150]: Failed
+          - listitem [ref=e151]:
+            - link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1171 Silverton · 20 Apr 2026 In progress" [ref=e152] [cursor=pointer]:
+              - /url: /search/e4ea8181-9228-49a7-8b87-5d776f31ed7a
+              - generic [ref=e153]:
+                - paragraph [ref=e154]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1171
+                - paragraph [ref=e155]: Silverton · 20 Apr 2026
+              - generic [ref=e156]: In progress
+          - listitem [ref=e157]:
+            - link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1171 16 Apr 2026 Failed" [ref=e158] [cursor=pointer]:
+              - /url: /search/fde6304c-05cc-4165-958b-7e2040e7cfb5
+              - generic [ref=e159]:
+                - paragraph [ref=e160]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1171
+                - paragraph [ref=e161]: 16 Apr 2026
+              - generic [ref=e162]: Failed
+          - listitem [ref=e163]:
+            - link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1171 16 Apr 2026 Failed" [ref=e164] [cursor=pointer]:
+              - /url: /search/04083628-307f-43bd-ab94-7559a8c2ea43
+              - generic [ref=e165]:
+                - paragraph [ref=e166]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1171
+                - paragraph [ref=e167]: 16 Apr 2026
+              - generic [ref=e168]: Failed
+          - listitem [ref=e169]:
+            - link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1171 Silverton · 15 Apr 2026 Complete" [ref=e170] [cursor=pointer]:
+              - /url: /search/8b431834-9afa-4319-8493-7ee0293ef8b0
+              - generic [ref=e171]:
+                - paragraph [ref=e172]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1171
+                - paragraph [ref=e173]: Silverton · 15 Apr 2026
+              - generic [ref=e174]: Complete
+          - listitem [ref=e175]:
+            - link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1171 Silverton · 15 Apr 2026 Complete" [ref=e176] [cursor=pointer]:
+              - /url: /search/090560dd-2efb-4e74-89d7-0bff8e13a28c
+              - generic [ref=e177]:
+                - paragraph [ref=e178]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1171
+                - paragraph [ref=e179]: Silverton · 15 Apr 2026
+              - generic [ref=e180]: Complete
+          - listitem [ref=e181]:
+            - link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1171 Silverton · 15 Apr 2026 Failed" [ref=e182] [cursor=pointer]:
+              - /url: /search/b380fbb7-567f-4a58-8ca3-e98a34cac0ca
+              - generic [ref=e183]:
+                - paragraph [ref=e184]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1171
+                - paragraph [ref=e185]: Silverton · 15 Apr 2026
+              - generic [ref=e186]: Failed
+          - listitem [ref=e187]:
+            - link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1171 Silverton · 15 Apr 2026 Failed" [ref=e188] [cursor=pointer]:
+              - /url: /search/c8b0dd7c-dea8-4ed8-8c52-507e12565fbd
+              - generic [ref=e189]:
+                - paragraph [ref=e190]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1171
+                - paragraph [ref=e191]: Silverton · 15 Apr 2026
+              - generic [ref=e192]: Failed
+          - listitem [ref=e193]:
+            - link "property24.com/for-sale/silverton/pretoria/gauteng/2958/1171 Silverton · 15 Apr 2026 Failed" [ref=e194] [cursor=pointer]:
+              - /url: /search/2c54f681-e860-474e-af41-46b7df7e0aa5
+              - generic [ref=e195]:
+                - paragraph [ref=e196]: property24.com/for-sale/silverton/pretoria/gauteng/2958/1171
+                - paragraph [ref=e197]: Silverton · 15 Apr 2026
+              - generic [ref=e198]: Failed
+  - button "Open Next.js Dev Tools" [ref=e20] [cursor=pointer]:
+    - img [ref=e21]
+  - alert [ref=e24]

@@ -87,6 +87,10 @@ function migrate(db: Database.Database) {
   if (!columnExists(db, "searches", "buildings_found")) {
     db.exec(`ALTER TABLE searches ADD COLUMN buildings_found TEXT DEFAULT '[]'`);
   }
+  // Multiple Street View headings per candidate (JSON array of /api/images URLs).
+  if (!columnExists(db, "candidates", "streetview_image_urls")) {
+    db.exec(`ALTER TABLE candidates ADD COLUMN streetview_image_urls TEXT DEFAULT NULL`);
+  }
 }
 
 export function createSearch(
@@ -173,6 +177,7 @@ export function upsertCandidate(data: {
   featureMatches: string;
   aiExplanation: string;
   streetviewImageUrl: string | null;
+  streetviewImageUrls?: string | null; // JSON array of all heading URLs
   satelliteImageUrl: string | null;
 }): string {
   const db = getDb();
@@ -181,8 +186,8 @@ export function upsertCandidate(data: {
     `INSERT INTO candidates (
        id, search_id, address, latitude, longitude, confidence_score,
        confidence_level, satellite_match_score, streetview_match_score,
-       feature_matches, ai_explanation, streetview_image_url, satellite_image_url
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       feature_matches, ai_explanation, streetview_image_url, streetview_image_urls, satellite_image_url
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     data.searchId,
@@ -196,6 +201,7 @@ export function upsertCandidate(data: {
     data.featureMatches,
     data.aiExplanation,
     data.streetviewImageUrl,
+    data.streetviewImageUrls ?? null,
     data.satelliteImageUrl
   );
   return id;

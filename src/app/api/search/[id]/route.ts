@@ -29,6 +29,7 @@ export async function GET(
     featureMatches: JSON.parse(c.feature_matches || "[]"),
     aiExplanation: c.ai_explanation,
     streetviewImageUrl: c.streetview_image_url,
+    streetviewImageUrls: c.streetview_image_urls ? JSON.parse(c.streetview_image_urls) : null,
     satelliteImageUrl: c.satellite_image_url,
     status: c.status,
     confirmedAt: c.confirmed_at,

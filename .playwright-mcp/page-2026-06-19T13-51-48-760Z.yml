@@ -1,0 +1,13 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - link "P Property Finder" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]: P
+        - generic [ref=e6]: Property Finder
+      - generic [ref=e7]: Pretoria · address identification
+  - main [ref=e8]:
+    - generic [ref=e10]: Loading…
+  - button "Open Next.js Dev Tools" [ref=e16] [cursor=pointer]:
+    - img [ref=e17]
+  - alert [ref=e20]

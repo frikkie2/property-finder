@@ -55,6 +55,14 @@ export default function ThreeWayComparison({ candidate, listing, onConfirm, onRe
   const proxy = (u: string) => `/api/proxy-image?url=${encodeURIComponent(u)}`;
   const listingSrc = photos[listingIdx] ? proxy(photos[listingIdx]) : null;
   const confirmed = candidate.status === "confirmed";
+  // All captured Street View headings (head-on, angled, opposite); fall back to the single URL.
+  const streetViews =
+    candidate.streetviewImageUrls && candidate.streetviewImageUrls.length
+      ? candidate.streetviewImageUrls
+      : candidate.streetviewImageUrl
+      ? [candidate.streetviewImageUrl]
+      : [];
+  const svLabels = ["head-on", "angled", "angled", "across street"];
 
   const levelChip =
     candidate.confidenceLevel === "high" ? "bg-forest text-card"
@@ -77,12 +85,34 @@ export default function ThreeWayComparison({ candidate, listing, onConfirm, onRe
         </div>
       </div>
 
-      {/* Three-way comparison */}
+      {/* Listing vs Street View vs Satellite */}
       <div className="flex flex-col md:flex-row gap-3">
         <Panel src={listingSrc} label="Listing photo" accent="#a8442a" onEnlarge={setEnlarged} />
-        <Panel src={candidate.streetviewImageUrl} label="Street View" accent="#b8791f" onEnlarge={setEnlarged} />
+        <Panel src={streetViews[0] ?? null} label="Street View — head-on" accent="#b8791f" onEnlarge={setEnlarged} />
         <Panel src={candidate.satelliteImageUrl} label="Satellite" accent="#2f6b4f" onEnlarge={setEnlarged} />
       </div>
+
+      {/* Extra Street View angles (the camera passes the house from several directions) */}
+      {streetViews.length > 1 && (
+        <div>
+          <p className="data-label mb-1.5">Street View — other angles</p>
+          <div className="grid grid-cols-3 gap-2">
+            {streetViews.slice(1, 4).map((src, i) => (
+              <button
+                key={i}
+                onClick={() => setEnlarged(src)}
+                className="relative aspect-[4/3] rounded-lg overflow-hidden border border-line bg-paper cursor-zoom-in"
+                aria-label={`Street View ${svLabels[i + 1] ?? "angle"}`}
+              >
+                <Image src={src} alt="" fill sizes="200px" className="object-cover" unoptimized />
+                <span className="absolute bottom-1 left-1 rounded bg-ink/70 px-1.5 py-0.5 text-[9px] font-mono text-card">
+                  {svLabels[i + 1] ?? "angle"}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Listing photo switcher — flip which listing photo you compare against */}
       {photos.length > 1 && (

@@ -4,88 +4,76 @@ interface Waypoint {
   address: string;
   lat: number;
   lng: number;
+  confirmed?: boolean;
 }
 
 interface Props {
   candidates: Waypoint[];
-  origin?: string;
 }
 
-export default function MapView({ candidates, origin = "Pretoria+East,+Gauteng" }: Props) {
+const LABELS = "123456789ABCDEFG";
+
+export default function MapView({ candidates }: Props) {
   if (!candidates || candidates.length === 0) {
     return (
-      <div className="flex h-16 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 text-sm text-gray-500">
+      <div className="flex h-16 items-center justify-center rounded-lg border border-dashed border-line bg-paper text-sm text-muted">
         No addresses to map
       </div>
     );
   }
 
-  // Build Google Maps drive-by route URL
-  const waypoints = candidates
-    .map((c) => encodeURIComponent(`${c.lat},${c.lng}`))
-    .join("/");
-  const destination = candidates[candidates.length - 1];
-  const mapsUrl = `https://www.google.com/maps/dir/${encodeURIComponent(origin)}/${waypoints}`;
+  // If a candidate is confirmed, show only that; otherwise the top 10.
+  const confirmedOnly = candidates.filter((c) => c.confirmed);
+  const shown = (confirmedOnly.length ? confirmedOnly : candidates).slice(0, 10);
+  const isConfirmed = confirmedOnly.length > 0;
 
-  const streetviewUrl = (c: Waypoint) =>
-    `https://www.google.com/maps?q=&layer=c&cbll=${c.lat},${c.lng}`;
+  const mapSrc =
+    "/api/staticmap?" +
+    shown.map((c, i) => `m=${c.lat},${c.lng},${LABELS[i]}`).join("&") +
+    (isConfirmed ? "&confirmed=1" : "");
 
-  // Center the map on the first candidate
-  const centerLat = candidates.reduce((s, c) => s + c.lat, 0) / candidates.length;
-  const centerLng = candidates.reduce((s, c) => s + c.lng, 0) / candidates.length;
-
-  // Build a Google Maps embed URL with markers (uses search mode with coords)
-  const embedUrl = `https://www.google.com/maps?q=${centerLat},${centerLng}&z=15&output=embed`;
+  const cleanAddr = (a: string) => a.replace(/, South Africa$/, "");
+  const streetviewUrl = (c: Waypoint) => `https://www.google.com/maps?q=&layer=c&cbll=${c.lat},${c.lng}`;
+  const mapUrl = (c: Waypoint) => `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}`;
+  // Drive-by route through the shown pins
+  const routeUrl =
+    `https://www.google.com/maps/dir/` + shown.map((c) => encodeURIComponent(`${c.lat},${c.lng}`)).join("/");
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 flex flex-col gap-3">
-      <div className="flex justify-between items-center">
-        <h3 className="text-sm font-semibold text-gray-900">All {candidates.length} candidates on map</h3>
+    <div className="rounded-xl border border-line bg-card p-4 flex flex-col gap-3">
+      <div className="flex justify-between items-center gap-3">
+        <h3 className="data-label">{isConfirmed ? "Confirmed location" : `Top ${shown.length} on map`}</h3>
         <a
-          href={mapsUrl}
+          href={routeUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:border-clay hover:text-clay transition-colors"
         >
-          <span>Drive-by route</span>
-          <span aria-hidden="true">&#8599;</span>
+          Drive-by route ↗
         </a>
       </div>
 
-      {/* Embedded map */}
-      <div className="w-full rounded-lg overflow-hidden border border-gray-200" style={{ height: 300 }}>
-        <iframe
-          src={embedUrl}
-          width="100%"
-          height="100%"
-          style={{ border: 0 }}
-          loading="lazy"
-          referrerPolicy="no-referrer-when-downgrade"
-          title="Candidate locations"
-        />
-      </div>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={mapSrc}
+        alt="Candidate locations"
+        className="w-full rounded-lg border border-line"
+        style={{ aspectRatio: "640 / 360", objectFit: "cover" }}
+      />
 
-      <ul className="space-y-1 mt-1">
-        {candidates.map((c, i) => (
-          <li key={i} className="flex items-center gap-2 text-xs text-gray-700">
-            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-bold">
-              {i + 1}
+      <ul className="space-y-1">
+        {shown.map((c, i) => (
+          <li key={i} className="flex items-center gap-2 text-xs text-ink">
+            <span
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-card"
+              style={{ background: isConfirmed ? "#2f6b4f" : "#a8442a" }}
+            >
+              {LABELS[i]}
             </span>
-            <a
-              href={streetviewUrl(c)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline text-blue-700 flex-1"
-            >
-              {c.address}
+            <a href={streetviewUrl(c)} target="_blank" rel="noopener noreferrer" className="font-mono hover:text-clay flex-1 truncate">
+              {cleanAddr(c.address)}
             </a>
-            <a
-              href={`https://www.google.com/maps?q=${c.lat},${c.lng}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-gray-500 hover:text-blue-700"
-              title="View on map"
-            >
+            <a href={mapUrl(c)} target="_blank" rel="noopener noreferrer" className="text-muted hover:text-clay" title="View on map">
               📍
             </a>
           </li>

@@ -110,6 +110,7 @@ export interface Candidate {
   featureMatches: FeatureMatch[];
   aiExplanation: string;
   streetviewImageUrl: string | null;
+  streetviewImageUrls?: string[] | null;
   satelliteImageUrl: string | null;
   status: "pending" | "confirmed" | "rejected";
   confirmedAt: string | null;

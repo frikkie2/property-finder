@@ -116,20 +116,18 @@ export default function SearchPage() {
     <div className="flex flex-col gap-6">
       {/* Breadcrumb / header */}
       <div className="flex justify-between items-start">
-        <div>
-          <a href="/" className="text-xs text-blue-700 hover:underline">
-            &larr; Back to dashboard
-          </a>
-          <h1 className="text-base font-semibold text-gray-900 mt-1 break-all">
-            {data.property24Url}
+        <div className="min-w-0">
+          <a href="/" className="text-xs text-clay hover:underline">&larr; Back to dashboard</a>
+          <h1 className="font-display text-lg text-ink mt-1 break-all">
+            {data.property24Url === "manual-upload" ? "Uploaded photos" : data.property24Url}
           </h1>
           {data.listedSuburb && (
-            <p className="text-xs text-gray-500 mt-0.5">Listed suburb: {data.listedSuburb}</p>
+            <p className="data-label mt-0.5">Listed suburb · {data.listedSuburb}</p>
           )}
         </div>
         <a
           href={`/search/${id}/debug`}
-          className="text-xs text-gray-600 hover:text-blue-700 underline whitespace-nowrap"
+          className="text-xs text-muted hover:text-clay underline whitespace-nowrap"
         >
           🔍 Debug view
         </a>
@@ -160,19 +158,15 @@ export default function SearchPage() {
           {/* Listing photo strip */}
           {data.listing.photoUrls?.length > 0 && (
             <section>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-                Listing photos ({data.listing.photoUrls.length})
-              </p>
+              <p className="data-label mb-2">Listing photos ({data.listing.photoUrls.length})</p>
               <PhotoStrip photoUrls={data.listing.photoUrls} />
             </section>
           )}
 
           {/* Extracted fingerprint — what AI saw */}
           {(data as any).fingerprint && (
-            <section className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-800 mb-2">
-                What the AI extracted from the photos
-              </p>
+            <section className="rounded-xl border border-line bg-card p-4">
+              <p className="data-label mb-2">What the AI extracted from the photos</p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-gray-800">
                 {(() => {
                   const f = (data as any).fingerprint;
@@ -305,13 +299,14 @@ export default function SearchPage() {
             />
           )}
 
-          {/* Drive-by map */}
+          {/* Drive-by map — top 10, or just the confirmed one */}
           {activeCandidates.length > 0 && (
             <MapView
               candidates={activeCandidates.map((c) => ({
                 address: c.address,
                 lat: c.latitude,
                 lng: c.longitude,
+                confirmed: c.status === "confirmed",
               }))}
             />
           )}
