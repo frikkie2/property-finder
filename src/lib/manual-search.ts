@@ -92,9 +92,15 @@ export async function runManualPhotoSearch(searchId: string, listing: ListingDat
         satKey = (await fetchSatelliteImage(m.house.lat, m.house.lng, 20, "640x640", 2)).key;
       } catch { /* satellite is display-only */ }
       const level = m.score >= 70 ? "high" : m.score >= 45 ? "medium" : "low";
+      // Show BOTH number signals; the satellite/Street View pin is the truth.
+      const streetPart = m.house.address.replace(/^\d+[A-Za-z]?\s*/, "");
+      const numberLine = m.house.readNumber && m.house.readNumber !== m.house.googleNumber
+        ? `Google no. ~${m.house.googleNumber}, number seen on site: ${m.house.readNumber}`
+        : `Google no. ~${m.house.googleNumber} (estimate)${m.house.readNumber ? ` · confirmed on site: ${m.house.readNumber}` : ""}`;
+      const address = `${streetPart} — ${numberLine}`;
       upsertCandidate({
         searchId,
-        address: m.house.address,
+        address,
         latitude: m.house.lat,
         longitude: m.house.lng,
         confidenceScore: m.score,

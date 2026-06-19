@@ -24,6 +24,10 @@ export interface IndexedHouse {
   svDate: string | null;
   facade: string;       // one-paragraph description of the street-facing facade
   features: string[];   // distinctive permanent features
+  // Two independent number signals, shown side by side — the pin (lat/lng) is
+  // the ground truth, the numbers are corroboration:
+  googleNumber: string;        // Google's geocoded number (often interpolated, ±1-2 plots)
+  readNumber: string | null;   // number actually read off the gate/wall in Street View, if legible
 }
 
 export interface StreetIndex {
@@ -67,6 +71,7 @@ interface FacadeReply {
   facade: string;
   features: string[];
   isHouse: boolean;
+  houseNumber: string | null;
 }
 
 /**
@@ -121,12 +126,14 @@ export async function buildStreetIndex(
         images: [base64Image(sv.base64, sv.mediaType)],
         prompt: `This is a Google Street View photo aimed at a residential property in ${suburb}, Pretoria.
 
-Describe the street-facing facade for later matching against a property listing. Focus on PERMANENT features: wall material and colour, roof type/colour and shape, number of storeys, boundary wall/fence type and colour, gate style and colour, garage doors (count/colour), window pattern, driveway paving, and any distinctive permanent objects (wall-mounted cross, decorative gable, carport, etc.). Ignore cars, bins, people, weather.
+Describe the street-facing facade for later matching against a property listing. Focus on PERMANENT features: wall material and colour, roof type/colour and shape, number of storeys, boundary wall/fence type and colour, gate style and colour, garage doors (count/colour), window pattern, driveway paving, and any distinctive permanent objects (wall-mounted cross, decorative gable, carport, etc.). Ignore cars, people and weather.
 
 If the photo does not actually show a house (empty stand, park, only road/wall with no building), set isHouse=false.
 
+Also READ THE HOUSE NUMBER if it is clearly legible anywhere in the image. In South Africa the street number is very commonly painted on the kerbside wheelie/refuse BIN, and also appears on the gate, wall, gate pillar, kerb, or postbox — check the bin first. Only report digits you can actually read; if none is legible, use null. Do NOT guess or use a neighbouring house's number.
+
 Respond ONLY with JSON:
-{"isHouse": true/false, "facade": "one paragraph", "features": ["distinctive permanent feature", ...]}`,
+{"isHouse": true/false, "houseNumber": null | "digits only, e.g. 117", "facade": "one paragraph", "features": ["distinctive permanent feature", ...]}`,
         maxTokens: 500,
       });
 
@@ -134,9 +141,17 @@ Respond ONLY with JSON:
       kept++;
       opts.onProgress?.(processed, numbers.length, kept);
 
+      // Keep BOTH number signals rather than picking one: Google's geocoded
+      // number (often interpolated) and the number read off the gate (if any).
+      const googleNumber = (geo.formattedAddress.match(/^\d+[A-Za-z]?/) || [String(n)])[0];
+      const ocr = (reply.houseNumber ?? "").trim();
+      const readNumber = /^\d{1,4}[A-Za-z]?$/.test(ocr) ? ocr : null;
+
       return {
         address: geo.formattedAddress,
-        houseNumber: String(n),
+        houseNumber: googleNumber,
+        googleNumber,
+        readNumber,
         lat: geo.lat,
         lng: geo.lng,
         svKey: sv.key,
