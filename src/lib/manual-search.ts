@@ -48,15 +48,16 @@ export async function runManualPhotoSearch(
     updateSearchFingerprint(searchId, JSON.stringify(fingerprint));
     appendPipelineLog(searchId, { stage: "fingerprint_extracted", facade: fingerprint.facade?.summary?.slice(0, 120) });
 
-    emit(
-      "verifying_streetview",
-      `Matching against ${totalHouses} indexed houses on ${indexes.map((i) => i.street).join(", ")}...`,
-      null,
-      30
+    emit("verifying_streetview", `Searching ${totalHouses} indexed houses in ${[...new Set(indexes.map((i) => i.suburb))].join(", ")}...`, null, 28);
+    const matches = await matchListingToIndexes(
+      listing,
+      fingerprint,
+      indexes,
+      (done, total) => {
+        emit("verifying_streetview", `Deep-comparing ${done}/${total} shortlisted candidates`, null, 40 + Math.round((done / total) * 45));
+      },
+      (phase) => emit("verifying_streetview", phase, null, 32)
     );
-    const matches = await matchListingToIndexes(listing, fingerprint, indexes, (done, total) => {
-      emit("verifying_streetview", `Compared ${done}/${total} indexed houses`, null, 30 + Math.round((done / total) * 55));
-    });
 
     appendPipelineLog(searchId, { stage: "street_match_complete", compared: matches.length, topScore: matches[0]?.score ?? 0 });
 

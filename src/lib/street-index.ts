@@ -3,7 +3,7 @@ import path from "path";
 import crypto from "crypto";
 import { geocodeAddress, fetchStreetViewHeadings, fetchSatelliteImage, haversineMeters, reverseGeocodeStreet } from "./google-maps";
 import { resolveSuburbBounds } from "./suburb-data";
-import { MODELS, base64Image, listingImage, mapWithConcurrency, visionJson, type ImageInput } from "./claude";
+import { MODELS, base64Image, listingImage, mapWithConcurrency, visionJson, textJson, type ImageInput } from "./claude";
 import type { ListingData, PropertyFingerprint } from "./types";
 
 /**
@@ -321,14 +321,82 @@ interface AerialReply {
 }
 
 /**
- * Compare a listing's facade photos against every house in one or more street
- * indexes; return matches ranked by score.
+ * CHEAP pre-filter: rank all indexed houses against the listing using only the
+ * stored TEXT signatures (facade description + features) vs the listing's
+ * fingerprint, batched through a small model. Returns the most plausible
+ * `keepTop` houses so the expensive image matcher only runs on a shortlist.
+ * Recall-oriented (inclusive) — precision comes from the deep stage.
+ */
+export async function prefilterHouses(
+  fingerprint: PropertyFingerprint,
+  houses: IndexedHouse[],
+  keepTop = 30
+): Promise<IndexedHouse[]> {
+  if (houses.length <= keepTop) return houses;
+
+  const target = [
+    `Facade (from the street): ${fingerprint.facade?.summary || "(unknown)"}`,
+    `From above: ${fingerprint.aerial?.summary || "(unknown)"}`,
+    `Distinctive cues: ${(fingerprint.exteriorCues || []).join("; ") || "(none)"}`,
+    `Storeys: ${fingerprint.storeys ?? "?"}, pool: ${fingerprint.aerial?.poolPresent ? "yes" : "unknown"}`,
+  ].join("\n");
+
+  const BATCH = 50;
+  const batches: IndexedHouse[][] = [];
+  for (let i = 0; i < houses.length; i += BATCH) batches.push(houses.slice(i, i + BATCH));
+
+  const perBatch = await mapWithConcurrency(batches, 6, async (batch, bi) => {
+    const lines = batch
+      .map((h, j) => `#${bi * BATCH + j}: ${(h.facade || "").slice(0, 220)} | features: ${(h.features || []).slice(0, 6).join(", ")}`)
+      .join("\n");
+    const reply = await textJson<{ keep: { id: number; score: number }[] }>(
+      MODELS.prefilter,
+      `You are shortlisting houses that could be the TARGET property. Judge on the text only.
+
+TARGET:
+${target}
+
+CANDIDATE HOUSES:
+${lines}
+
+Return every candidate that could PLAUSIBLY be the target — be INCLUSIVE, this is a recall-oriented shortlist, not the final answer. Weight DISTINCTIVE matches (unusual wall colour like salmon-pink/ochre, a thatched lapa, double-storey, a specific pool shape, named features) and rule out only clear contradictions (e.g. single vs double storey).
+
+Respond ONLY JSON: {"keep": [{"id": number, "score": 0-100}]}`,
+      1200
+    );
+    return reply.keep ?? [];
+  });
+
+  const merged = perBatch
+    .flat()
+    .filter((x): x is { id: number; score: number } => x != null)
+    .sort((a, b) => b.score - a.score);
+  const picked = merged
+    .slice(0, keepTop)
+    .map((x) => houses[x.id])
+    .filter((h): h is IndexedHouse => !!h);
+  // Safety: if the model returned too few, pad with the next houses.
+  if (picked.length < Math.min(keepTop, houses.length)) {
+    const have = new Set(picked);
+    for (const h of houses) {
+      if (picked.length >= keepTop) break;
+      if (!have.has(h)) picked.push(h);
+    }
+  }
+  console.log(`[PREFILTER] ${houses.length} houses -> ${picked.length} shortlisted`);
+  return picked;
+}
+
+/**
+ * Compare a listing's photos against the indexed houses; return matches ranked
+ * by score. Over a large index the cheap pre-filter trims to a shortlist first.
  */
 export async function matchListingToIndexes(
   listing: ListingData,
   fingerprint: PropertyFingerprint,
   indexes: StreetIndex[],
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void,
+  onPhase?: (phase: string) => void
 ): Promise<StreetMatch[]> {
   // Facade photos chosen during fingerprinting (1-indexed), else first few.
   const idx = (fingerprint.facade?.bestPhotoIndexes ?? [])
@@ -337,7 +405,11 @@ export async function matchListingToIndexes(
   const facadeRefs = (idx.length ? idx.map((i) => listing.photoUrls[i - 1]) : listing.photoUrls.slice(0, 3));
   const facadeImages: ImageInput[] = facadeRefs.map(listingImage);
 
-  const houses = indexes.flatMap((ix) => ix.houses);
+  const allHouses = indexes.flatMap((ix) => ix.houses);
+  // Stage 1: cheap text shortlist when the index is large.
+  if (allHouses.length > 40) onPhase?.(`Pre-filtering ${allHouses.length} houses (cheap pass)...`);
+  const houses = await prefilterHouses(fingerprint, allHouses, 30);
+  if (allHouses.length > 40) onPhase?.(`Deep-comparing the top ${houses.length} candidates...`);
 
   // For the aerial signal, send a broader set of listing photos (pool, garden,
   // paving, roofline are spread across the set, not just the facade picks).

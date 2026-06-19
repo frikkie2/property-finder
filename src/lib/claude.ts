@@ -20,6 +20,7 @@ export const MODELS = {
   compare: "claude-sonnet-4-6",
   fingerprint: "claude-sonnet-4-6",
   adjudicate: "claude-opus-4-8",
+  prefilter: "claude-haiku-4-5", // cheap text-only shortlisting over a whole suburb
 } as const;
 
 export type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
@@ -133,6 +134,18 @@ export async function visionJson<T>(options: {
 }): Promise<T> {
   const text = await visionRequest(options);
   return parseJsonReply<T>(text);
+}
+
+/** Text-only request that parses a JSON object from the reply. */
+export async function textJson<T>(model: string, prompt: string, maxTokens = 1500): Promise<T> {
+  const client = getClient();
+  const message = await client.messages.create({
+    model,
+    max_tokens: maxTokens,
+    messages: [{ role: "user", content: prompt }],
+  });
+  const textBlock = message.content.find((b) => b.type === "text");
+  return parseJsonReply<T>(textBlock && textBlock.type === "text" ? textBlock.text : "");
 }
 
 export function parseJsonReply<T>(text: string): T {
