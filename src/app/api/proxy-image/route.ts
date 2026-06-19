@@ -17,6 +17,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing url parameter" }, { status: 400 });
   }
 
+  // Locally uploaded photos: read straight from disk (no network).
+  const uploadMatch = imageUrl.match(/\/api\/uploads\/([^/]+)\/(.+)$/);
+  if (uploadMatch) {
+    const file = path.join(
+      process.cwd(), ".cache", "uploads",
+      path.basename(uploadMatch[1]), path.basename(decodeURIComponent(uploadMatch[2]))
+    );
+    if (fs.existsSync(file)) {
+      const buf = fs.readFileSync(file);
+      let ct = "image/jpeg";
+      if (buf[0] === 0x89 && buf[1] === 0x50) ct = "image/png";
+      else if (buf[0] === 0x52 && buf[1] === 0x49) ct = "image/webp";
+      return new NextResponse(new Uint8Array(buf), {
+        headers: { "Content-Type": ct, "Cache-Control": "public, max-age=86400" },
+      });
+    }
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const cacheFile = path.join(
     CACHE_DIR,
     crypto.createHash("md5").update(imageUrl).digest("hex") + ".img"

@@ -1,5 +1,5 @@
 import type { ListingData, PropertyFingerprint } from "./types";
-import { MODELS, urlImage, visionJson } from "./claude";
+import { MODELS, listingImage, visionJson } from "./claude";
 
 export function buildFeatureExtractionPrompt(listing: ListingData): string {
   const facts = [
@@ -89,7 +89,10 @@ export function normalizeFingerprint(raw: Record<string, unknown>): PropertyFing
   };
 }
 
-const MAX_PHOTOS = 20;
+// Capped at 12: each photo is fetched server-side by Anthropic, and one slow
+// images.prop24.com response can time out the whole request. 12 covers the
+// facade/exterior shots that matter without overloading the fetch.
+const MAX_PHOTOS = 12;
 
 export async function extractFeaturesFromListing(listing: ListingData): Promise<PropertyFingerprint> {
   const photos = listing.photoUrls.slice(0, MAX_PHOTOS);
@@ -101,7 +104,7 @@ export async function extractFeaturesFromListing(listing: ListingData): Promise<
   // so this works even when the local network blocks that host.
   const raw = await visionJson<Record<string, unknown>>({
     model: MODELS.fingerprint,
-    images: photos.map(urlImage),
+    images: photos.map(listingImage),
     labels: photos.map((_, i) => `Photo ${i + 1}:`),
     prompt: buildFeatureExtractionPrompt(listing),
     maxTokens: 4096,

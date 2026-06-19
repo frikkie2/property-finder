@@ -14,9 +14,24 @@ export async function GET(
 
   const listingData = search.listing_data ? JSON.parse(search.listing_data) : null;
   const fingerprint = search.fingerprint ? JSON.parse(search.fingerprint) : null;
+  // Map DB rows (snake_case) to the camelCase Candidate shape the UI expects.
+  // Scores are stored 0-100; the UI displays them as-is.
   const candidates = search.candidates.map((c: any) => ({
-    ...c,
-    feature_matches: JSON.parse(c.feature_matches || "[]"),
+    id: c.id,
+    listingId: c.search_id,
+    address: c.address,
+    latitude: c.latitude,
+    longitude: c.longitude,
+    confidenceScore: c.confidence_score,
+    confidenceLevel: c.confidence_level,
+    satelliteMatchScore: c.satellite_match_score,
+    streetviewMatchScore: c.streetview_match_score,
+    featureMatches: JSON.parse(c.feature_matches || "[]"),
+    aiExplanation: c.ai_explanation,
+    streetviewImageUrl: c.streetview_image_url,
+    satelliteImageUrl: c.satellite_image_url,
+    status: c.status,
+    confirmedAt: c.confirmed_at,
   }));
 
   const progressDetail = search.progress_detail ? JSON.parse(search.progress_detail) : null;

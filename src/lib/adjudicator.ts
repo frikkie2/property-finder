@@ -1,6 +1,6 @@
 import type { ListingData, PropertyFingerprint } from "./types";
 import { fetchSatelliteImage, reverseGeocode, geocodeAddress, fetchStreetViewAimedAt } from "./google-maps";
-import { MODELS, base64Image, urlImage, visionJson, type ImageInput } from "./claude";
+import { MODELS, base64Image, listingImage, visionJson, type ImageInput } from "./claude";
 import type { StreetViewScored } from "./streetview-compare";
 import fs from "fs";
 import path from "path";
@@ -53,7 +53,7 @@ export async function adjudicate(
 
   listingPhotos.forEach((url, i) => {
     labels.push(`Listing photo ${i + 1}:`);
-    images.push(urlImage(url));
+    images.push(listingImage(url));
   });
 
   const candidateMeta: string[] = [];
@@ -161,7 +161,7 @@ export async function tryQuickWin(
 
   const reply = await visionJson<{ score: number; reasoning: string }>({
     model: MODELS.compare,
-    images: [...facadePhotos.map(urlImage), base64Image(sv.base64, sv.mediaType)],
+    images: [...facadePhotos.map(listingImage), base64Image(sv.base64, sv.mediaType)],
     labels: [...facadePhotos.map((_, i) => `Listing photo ${i + 1}:`), "Street View of geocoded address:"],
     prompt: `The listing photos show a house whose number "${number}" on "${street}" was read from a photo. The final image is Street View of that geocoded address. Is it the same house? Respond ONLY with JSON: {"score": 0-100, "reasoning": "1-2 sentences"}`,
     maxTokens: 300,

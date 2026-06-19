@@ -1,17 +1,28 @@
 import SearchInput from "@/components/SearchInput";
+import PhotoUploadInput from "@/components/PhotoUploadInput";
 import SearchHistory from "@/components/SearchHistory";
 
 export default function HomePage() {
   return (
     <div className="flex flex-col gap-8">
-      {/* Hero / search section */}
+      {/* Search by URL */}
       <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Find a property address</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">Find a property by listing link</h2>
         <p className="text-sm text-gray-500 mb-5">
           Paste a Property24 listing URL and we will pinpoint the real street address using satellite
           and street-view imagery.
         </p>
         <SearchInput />
+      </section>
+
+      {/* Search by uploaded photos */}
+      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">…or upload photos directly</h2>
+        <p className="text-sm text-gray-500 mb-5">
+          No link needed — drop in the property photos, choose the indexed area, and we will match
+          them house-by-house against the decoded street.
+        </p>
+        <PhotoUploadInput />
       </section>
 
       {/* Search history */}

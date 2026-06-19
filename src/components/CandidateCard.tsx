@@ -13,16 +13,18 @@ function ConfidenceBadge({ level, score }: { level: Candidate["confidenceLevel"]
   };
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${colours[level] ?? colours.low}`}>
-      {Math.round(score * 100)}% {level}
+      {Math.round(score)}% {level}
     </span>
   );
 }
 
 export default function CandidateCard({ candidate, rank }: Props) {
-  const svPct = Math.round(candidate.streetviewMatchScore * 100);
-  const satPct = Math.round(candidate.satelliteMatchScore * 100);
-  const matchedCount = candidate.featureMatches.filter((f) => f.matched).length;
-  const totalCount = candidate.featureMatches.length;
+  // Scores are 0-100 already.
+  const svPct = Math.round(candidate.streetviewMatchScore);
+  const satPct = Math.round(candidate.satelliteMatchScore);
+  const featureMatches = candidate.featureMatches ?? [];
+  const matchedCount = featureMatches.filter((f) => f.matched).length;
+  const totalCount = featureMatches.length;
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 flex flex-col gap-3">

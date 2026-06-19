@@ -1,4 +1,4 @@
-import type { SearchProgress, SearchResult, Candidate } from "./types";
+import type { SearchProgress, SearchResult, Candidate, ListingData } from "./types";
 import {
   createSearch,
   getSearch,
@@ -29,7 +29,10 @@ const MIN_AERIAL_SCORE = 30;
 export async function runSearchPipeline(
   property24Url: string,
   existingSearchId?: string,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  // When provided (manual photo upload), the listing is used as-is and the
+  // Property24 scrape stage is skipped.
+  prebuiltListing?: ListingData
 ): Promise<SearchResult> {
   const searchId = existingSearchId || createSearch(property24Url, "", {});
 
@@ -48,24 +51,40 @@ export async function runSearchPipeline(
 
   try {
     // ---- Stage 1: listing ----
-    emitProgress("extracting_listing", "Fetching listing from Property24...", null, 4);
-    const listing = await extractListingFromUrl(property24Url);
-    updateSearchListingData(searchId, JSON.stringify(listing));
-    getDb().prepare("UPDATE searches SET listed_suburb = ? WHERE id = ?").run(listing.listedSuburb, searchId);
-    appendPipelineLog(searchId, {
-      stage: "listing_extracted",
-      suburb: listing.listedSuburb,
-      photos: listing.photoUrls.length,
-      erf: listing.plotSize,
-    });
-    emitProgress(
-      "extracting_listing",
-      "Listing extracted",
-      `${listing.photoUrls.length} photos, ${listing.bedrooms ?? "?"} bed, erf ${listing.plotSize ?? "?"} m², ${listing.listedSuburb}`,
-      8
-    );
+    let listing: ListingData;
+    if (prebuiltListing) {
+      listing = prebuiltListing;
+      emitProgress(
+        "extracting_listing",
+        "Using uploaded photos",
+        `${listing.photoUrls.length} photos, ${listing.listedSuburb}`,
+        8
+      );
+      appendPipelineLog(searchId, {
+        stage: "manual_upload",
+        suburb: listing.listedSuburb,
+        photos: listing.photoUrls.length,
+      });
+    } else {
+      emitProgress("extracting_listing", "Fetching listing from Property24...", null, 4);
+      listing = await extractListingFromUrl(property24Url);
+      updateSearchListingData(searchId, JSON.stringify(listing));
+      getDb().prepare("UPDATE searches SET listed_suburb = ? WHERE id = ?").run(listing.listedSuburb, searchId);
+      appendPipelineLog(searchId, {
+        stage: "listing_extracted",
+        suburb: listing.listedSuburb,
+        photos: listing.photoUrls.length,
+        erf: listing.plotSize,
+      });
+      emitProgress(
+        "extracting_listing",
+        "Listing extracted",
+        `${listing.photoUrls.length} photos, ${listing.bedrooms ?? "?"} bed, erf ${listing.plotSize ?? "?"} m², ${listing.listedSuburb}`,
+        8
+      );
+    }
     if (listing.photoUrls.length === 0) {
-      throw new Error("No photos found in the listing — cannot identify a property without photos.");
+      throw new Error("No photos provided — cannot identify a property without photos.");
     }
 
     // ---- Stage 2: fingerprint ----

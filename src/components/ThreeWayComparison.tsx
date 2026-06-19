@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import type { Candidate, ListingData } from "@/lib/types";
 import FeatureMatchGrid from "./FeatureMatchGrid";
+import Lightbox from "./Lightbox";
 
 interface Props {
   candidate: Candidate;
@@ -16,16 +18,21 @@ function ImagePanel({
   alt,
   label,
   borderClass,
+  onEnlarge,
 }: {
   src: string | null;
   alt: string;
   label: string;
   borderClass: string;
+  onEnlarge: (src: string) => void;
 }) {
   return (
     <div className={`flex flex-col gap-1 flex-1`}>
       <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</span>
-      <div className={`relative aspect-video w-full rounded-lg overflow-hidden border-4 ${borderClass} bg-gray-100`}>
+      <div
+        className={`relative aspect-video w-full rounded-lg overflow-hidden border-4 ${borderClass} bg-gray-100 ${src ? "cursor-zoom-in" : ""}`}
+        onClick={() => src && onEnlarge(src)}
+      >
         {src ? (
           <Image
             src={src}
@@ -46,7 +53,10 @@ function ImagePanel({
 }
 
 export default function ThreeWayComparison({ candidate, listing, onConfirm, onReject }: Props) {
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${candidate.latitude},${candidate.longitude}`;
+  const [enlarged, setEnlarged] = useState<string | null>(null);
+  const { latitude, longitude } = candidate;
+  const streetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${latitude},${longitude}`;
+  const satelliteUrl = `https://www.google.com/maps/@${latitude},${longitude},80m/data=!3m1!1e3`;
   const rawPhoto = listing.photoUrls?.[0] ?? null;
   const firstPhoto = rawPhoto ? `/api/proxy-image?url=${encodeURIComponent(rawPhoto)}` : null;
 
@@ -73,27 +83,31 @@ export default function ThreeWayComparison({ candidate, listing, onConfirm, onRe
         </span>
       </div>
 
-      {/* Three-way image comparison */}
+      {/* Three-way image comparison (click any image to enlarge) */}
       <div className="flex flex-col md:flex-row gap-4">
         <ImagePanel
           src={firstPhoto}
           alt="Listing photo"
           label="Listing photo"
           borderClass="border-blue-700"
+          onEnlarge={setEnlarged}
         />
         <ImagePanel
           src={candidate.streetviewImageUrl}
           alt="Street view"
           label="Street view"
           borderClass="border-yellow-400"
+          onEnlarge={setEnlarged}
         />
         <ImagePanel
           src={candidate.satelliteImageUrl}
           alt="Satellite"
           label="Satellite"
           borderClass="border-green-500"
+          onEnlarge={setEnlarged}
         />
       </div>
+      <Lightbox src={enlarged} onClose={() => setEnlarged(null)} />
 
       {/* AI explanation */}
       {candidate.aiExplanation && (
@@ -128,12 +142,20 @@ export default function ThreeWayComparison({ candidate, listing, onConfirm, onRe
           Not a match
         </button>
         <a
-          href={mapsUrl}
+          href={streetViewUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="rounded-lg border border-gray-300 px-5 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+          className="rounded-lg border border-yellow-400 px-5 py-2 text-sm font-semibold text-yellow-700 hover:bg-yellow-50 transition-colors"
         >
-          Open in Maps
+          Open in Street View ↗
+        </a>
+        <a
+          href={satelliteUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-lg border border-green-500 px-5 py-2 text-sm font-semibold text-green-700 hover:bg-green-50 transition-colors"
+        >
+          Open in Satellite ↗
         </a>
       </div>
     </div>

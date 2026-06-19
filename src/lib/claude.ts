@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import fs from "fs";
+import path from "path";
 
 let _client: Anthropic | null = null;
 
@@ -34,6 +36,33 @@ export function base64Image(data: string, mediaType: ImageMediaType): ImageInput
   return { kind: "base64", data, mediaType };
 }
 
+function detectMediaType(buf: Buffer): ImageMediaType {
+  if (buf[0] === 0x89 && buf[1] === 0x50) return "image/png";
+  if (buf[0] === 0xff && buf[1] === 0xd8) return "image/jpeg";
+  if (buf[0] === 0x47 && buf[1] === 0x49) return "image/gif";
+  if (buf[0] === 0x52 && buf[1] === 0x49) return "image/webp";
+  return "image/jpeg";
+}
+
+/**
+ * Resolve a listing photo reference to an image input.
+ * - http(s) URL → URL source (Anthropic fetches it server-side; works even
+ *   when this machine can't reach the image host, e.g. images.prop24.com).
+ * - "/api/uploads/<searchId>/<file>" → read the uploaded file from disk and
+ *   send as base64 (Anthropic can't fetch localhost).
+ */
+export function listingImage(url: string): ImageInput {
+  if (/^https?:\/\//i.test(url)) return urlImage(url);
+  const m = url.match(/\/api\/uploads\/([^/]+)\/(.+)$/);
+  if (m) {
+    const file = path.join(process.cwd(), ".cache", "uploads", m[1], decodeURIComponent(m[2]));
+    const buf = fs.readFileSync(file);
+    return base64Image(buf.toString("base64"), detectMediaType(buf));
+  }
+  // Fallback: treat as a URL and let Anthropic try.
+  return urlImage(url);
+}
+
 function toImageBlock(img: ImageInput): Anthropic.ImageBlockParam {
   if (img.kind === "url") {
     return { type: "image", source: { type: "url", url: img.url } };
@@ -66,14 +95,29 @@ export async function visionRequest(options: {
   });
   content.push({ type: "text", text: options.prompt });
 
-  const message = await client.messages.create({
-    model: options.model,
-    max_tokens: options.maxTokens ?? 2048,
-    messages: [{ role: "user", content }],
-  });
-
-  const textBlock = message.content.find((b) => b.type === "text");
-  return textBlock && textBlock.type === "text" ? textBlock.text : "";
+  // When images are URL sources, Anthropic fetches them server-side and a
+  // single slow host (images.prop24.com) can 400 the whole request with a
+  // "timed out while trying to download the file" error. The SDK does not
+  // retry 400s, so retry that specific transient case ourselves.
+  const maxDownloadRetries = 4;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const message = await client.messages.create({
+        model: options.model,
+        max_tokens: options.maxTokens ?? 2048,
+        messages: [{ role: "user", content }],
+      });
+      const textBlock = message.content.find((b) => b.type === "text");
+      return textBlock && textBlock.type === "text" ? textBlock.text : "";
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isDownloadTimeout = /timed out while trying to download|failed to (?:download|fetch) the file|unable to (?:download|fetch)/i.test(msg);
+      if (!isDownloadTimeout || attempt >= maxDownloadRetries) throw err;
+      const backoff = 1500 * (attempt + 1);
+      console.warn(`[CLAUDE] image download timeout (attempt ${attempt + 1}/${maxDownloadRetries}), retrying in ${backoff}ms`);
+      await new Promise((r) => setTimeout(r, backoff));
+    }
+  }
 }
 
 /**

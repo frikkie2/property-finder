@@ -3,7 +3,7 @@ import path from "path";
 import crypto from "crypto";
 import type { FacadeSignature, PropertyFingerprint } from "./types";
 import { fetchStreetViewAimedAt } from "./google-maps";
-import { MODELS, base64Image, mapWithConcurrency, urlImage, visionJson, type ImageInput } from "./claude";
+import { MODELS, base64Image, mapWithConcurrency, listingImage, visionJson, type ImageInput } from "./claude";
 import type { ConfirmedCandidate } from "./tile-sweep";
 
 const CACHE_DIR = path.join(process.cwd(), ".cache", "sv-compare");
@@ -103,7 +103,7 @@ export async function scoreCandidatesViaStreetView(
       }
 
       const images: ImageInput[] = [
-        ...facadePhotoUrls.map(urlImage),
+        ...facadePhotoUrls.map(listingImage),
         base64Image(sv.base64, sv.mediaType),
       ];
       const labels = [
