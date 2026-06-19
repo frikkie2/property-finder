@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { geocodeAddress, fetchStreetViewAimedAt, fetchSatelliteImage, haversineMeters } from "./google-maps";
+import { geocodeAddress, fetchStreetViewHeadings, fetchSatelliteImage, haversineMeters } from "./google-maps";
 import { MODELS, base64Image, listingImage, mapWithConcurrency, visionJson, type ImageInput } from "./claude";
 import type { ListingData, PropertyFingerprint } from "./types";
 
@@ -20,7 +20,8 @@ export interface IndexedHouse {
   houseNumber: string;
   lat: number;
   lng: number;
-  svKey: string;        // cached Street View image (served via /api/images/<key>)
+  svKey: string;        // primary (head-on) Street View image — for display
+  svKeys: { key: string; label: string }[]; // all headings: head-on, angled L/R, opposite
   satKey: string | null; // cached satellite close-up (overhead) for aerial matching
   svDate: string | null;
   facade: string;       // one-paragraph description of the street-facing facade
@@ -138,8 +139,11 @@ export async function buildStreetIndex(
       if (seen.some((s) => haversineMeters(s.lat, s.lng, geo.lat, geo.lng) < 12)) return null;
       seen.push({ lat: geo.lat, lng: geo.lng });
 
-      const sv = await fetchStreetViewAimedAt(geo.lat, geo.lng);
-      if (!sv) return null;
+      // Capture several headings: head-on, angled L/R (set-back houses), and the
+      // opposite/across-street view (matches the background of outward-shot photos).
+      const { shots, panoDate } = await fetchStreetViewHeadings(geo.lat, geo.lng);
+      const headOn = shots[0] ? cachedMapImage(shots[0].key) : null;
+      if (!headOn) return null;
 
       // Overhead close-up for aerial matching (pool, paving, roof, trees).
       let satKey: string | null = null;
@@ -149,7 +153,7 @@ export async function buildStreetIndex(
 
       const reply = await visionJson<FacadeReply>({
         model: MODELS.fingerprint,
-        images: [base64Image(sv.base64, sv.mediaType)],
+        images: [headOn],
         prompt: `This is a Google Street View photo aimed at a residential property in ${suburb}, Pretoria.
 
 Describe the street-facing facade for later matching against a property listing. Focus on PERMANENT features: wall material and colour, roof type/colour and shape, number of storeys, boundary wall/fence type and colour, gate style and colour, garage doors (count/colour), window pattern, driveway paving, and any distinctive permanent objects (wall-mounted cross, decorative gable, carport, etc.). Ignore cars, people and weather.
@@ -180,9 +184,10 @@ Respond ONLY with JSON:
         readNumber,
         lat: geo.lat,
         lng: geo.lng,
-        svKey: sv.key,
+        svKey: shots[0].key,
+        svKeys: shots.map((s) => ({ key: s.key, label: s.label })),
         satKey,
-        svDate: sv.panoDate,
+        svDate: panoDate,
         facade: reply.facade,
         features: reply.features ?? [],
       };
@@ -258,33 +263,42 @@ export async function matchListingToIndexes(
     houses,
     6,
     async (house): Promise<StreetMatch | null> => {
-      const svImg = cachedMapImage(house.svKey);
-      if (!svImg) return null;
+      // All captured headings (head-on, angled L/R, opposite/across-street).
+      const svShots = (house.svKeys?.length ? house.svKeys : [{ key: house.svKey, label: "head-on" }])
+        .map((s) => ({ ...s, img: cachedMapImage(s.key) }))
+        .filter((s) => s.img);
+      if (svShots.length === 0) return null;
 
       // --- Signal 1: street-side comparison via exterior CUES ---
       // Listings are often interior-heavy with only glimpses of the outside, so
       // instead of demanding a full facade we check how many distinctive
       // exterior cues (lamp pole, boundary wall colour, a specific tree,
-      // neighbour features…) are corroborated by this Street View.
+      // neighbour features…) are corroborated by ANY of the street views.
       const facadeP = visionJson<MatchReply>({
         model: MODELS.compare,
-        images: [...facadeImages, svImg],
+        images: [...facadeImages, ...svShots.map((s) => s.img!)],
         labels: [
           ...facadeRefs.map((_, i) => `Listing photo ${i + 1}:`),
-          `Street View of ${house.address}${house.svDate ? ` (${house.svDate})` : ""}:`,
+          ...svShots.map((s) => `Street View (${s.label}) of ${house.address}${house.svDate ? ` ${house.svDate}` : ""}:`),
         ],
-        prompt: `The first image(s) are listing photos of ONE property — they may show the full street facade, OR only interior rooms with small glimpses of the outside (through windows/doors, in backgrounds, at edges). The LAST image is Google Street View of a candidate address.
+        prompt: `The first image(s) are listing photos of ONE property — they may show the full street facade, OR only interior rooms with small glimpses of the outside (through windows/doors, in backgrounds, at edges). Note: listing photos are often shot from INSIDE the stand looking OUT toward the street, so their backgrounds show the across-the-road streetscape. The remaining images are several Google Street View headings at this candidate address: head-on at the house, angled left/right (to catch a house set back behind a wall/trees), and the OPPOSITE direction (the across-street view that would appear behind an outward-facing listing photo).
 
 The property's distinctive EXTERIOR CUES (mined from all its photos) are:
 ${(cues.length ? cues.map((c, i) => `  ${i + 1}. ${c}`).join("\n") : "  (none extracted)")}
 
 Also use the facade signature if the listing shows the front: """${fingerprint.facade?.summary || ""}"""
 
-Your job: judge how strongly THIS Street View corroborates the property. Go cue by cue — is each one present / plausibly present / clearly absent or contradicted? A municipal lamp pole, a specific boundary-wall colour+material, a distinctive tree by the gate, or a neighbour's feature appearing here is strong support; a hard contradiction (e.g. cue says low face-brick wall, this is a tall white plaster wall; or storeys differ) is strong evidence against.
+Your job: judge how strongly THIS Street View corroborates the property. Go cue by cue — is each present / plausibly present / clearly absent or contradicted?
+
+CRITICAL — weight by DISTINCTIVENESS, not by count:
+- A match on a RARE cue is strong evidence the house is the same: an unusual wall COLOUR (salmon/terracotta-pink, ochre), arched wrought-iron gates, a thatched lapa with a chimney, a specific tree species by the gate, a named wall plaque. ONE clear rare-cue match should score 80+.
+- A match on a COMMON cue is weak and near-worthless on its own: "has a wall", "has a black palisade sliding gate", "has a paved driveway", "has trees" — most houses on this street have these. Do NOT score high just because common cues match.
+- A hard contradiction (storeys differ; cue says salmon-pink plaster, this is bare face-brick) is strong evidence AGAINST → score low.
+- If mature trees obscure the frontage so cues can't be checked, say so and score modestly (40-55), not high.
 
 Street View may predate the listing (paint/plants change; structure, walls, poles, mature trees do not).
-Score 0-100 by weight of corroboration: 0-20 contradicted; 21-45 little/no support; 46-65 some cues match; 66-85 several distinctive cues match; 86-100 multiple distinctive cues clearly match. Use the FULL range — do not default to a middle value.
-Respond ONLY JSON: {"score": number, "reasoning": "which cues matched/contradicted", "matchingFeatures": ["cues corroborated"], "differences": ["cues contradicted"]}`,
+Score 0-100: 0-20 contradicted; 21-45 only common cues / mostly hidden; 46-65 one rare cue partially matches or several common ones; 66-85 a rare distinctive cue clearly matches; 86-100 multiple distinctive cues clearly match. Use the FULL range.
+Respond ONLY JSON: {"score": number, "reasoning": "which cues matched/contradicted and how rare", "matchingFeatures": ["cues corroborated"], "differences": ["cues contradicted"]}`,
         maxTokens: 700,
       }).catch(() => null);
 
@@ -300,17 +314,15 @@ Respond ONLY JSON: {"score": number, "reasoning": "which cues matched/contradict
             ],
             prompt: `The first image(s) are listing photos of a property (may show pool, garden, patio, driveway, carport, roof — not necessarily the street). The LAST image is a Google satellite (overhead) view of a candidate stand.
 
-Judge whether the listing property could be THIS stand seen from above. Reason about overhead-visible features:
-- SWIMMING POOL: present? shape and rough position on the stand?
-- PAVING/DRIVEWAY: extent, pattern, courtyard paving.
-- ROOF footprint: shape (L/T/rectangle), carport/flat sections, colour.
-- TREES: large canopy trees and their position.
-- STAND layout: house position, open garden areas, outbuildings/lapa.
+Judge whether the listing property could be THIS stand seen from above, weighting by DISTINCTIVENESS:
+- DISTINCTIVE overhead features (strong evidence when they match): a thatched lapa (round/irregular textured roof, often with a chimney), an unusual pool SHAPE and its exact position relative to the house, a flat-roofed carport in a specific spot, an L/T/U roof footprint, a tennis court, a large solar array.
+- GENERIC features (near-worthless on their own — most stands have them): "has a pool", "has a paved driveway", "has trees", "has a rectangular roof". Do NOT score high on these alone.
 ${aerialSummary ? `Expected overhead signature from the listing: "${aerialSummary}"` : ""}
 
-If the listing photos give no overhead-relevant cues at all, return score -1.
-Score: -1 no aerial cues; 0-20 contradicts (e.g. listing has a pool, this stand has none); 21-45 unlikely; 46-65 possible; 66-85 likely; 86-100 strong overhead match.
-Respond ONLY JSON: {"score": number, "reasoning": "..."}`,
+Reward a clear match on a distinctive feature (e.g. a thatched lapa in the right position, the same pool shape) with 80+. Score modestly (40-60) when only generic features align. Penalize hard contradictions (listing has a pool, this stand clearly has none) with <25.
+If the listing photos give no overhead-relevant cues at all, return score -1 (not 70).
+Score: -1 no aerial cues; 0-20 contradicts; 21-45 only generic alignment / unlikely; 46-65 generic match; 66-85 a distinctive feature matches; 86-100 multiple distinctive features match. Use the FULL range — do NOT default to ~72.
+Respond ONLY JSON: {"score": number, "reasoning": "name the distinctive vs generic features"}`,
             maxTokens: 400,
           }).catch(() => null)
         : Promise.resolve(null);
@@ -320,13 +332,13 @@ Respond ONLY JSON: {"score": number, "reasoning": "..."}`,
       const facadeScore = typeof facadeR?.score === "number" ? facadeR.score : -1;
       const aerialScore = typeof aerialR?.score === "number" ? aerialR.score : -1;
 
-      // Combine: drop unassessable signals, weight aerial a touch higher (it is
-      // the discriminator when the listing has no street-facing photo).
-      const parts: { w: number; v: number }[] = [];
-      if (facadeScore >= 0) parts.push({ w: 0.5, v: facadeScore });
-      if (aerialScore >= 0) parts.push({ w: 0.5, v: aerialScore });
-      const combined = parts.length
-        ? Math.round(parts.reduce((s, p) => s + p.w * p.v, 0) / parts.reduce((s, p) => s + p.w, 0))
+      // Combine by the STRONGEST signal, not a dilutive average: a strong
+      // distinctive match in either channel (a salmon-pink wall from the
+      // street, or a thatched lapa from above) should carry the score even if
+      // the other channel is generic/blocked. max-leaning: 0.65*max + 0.35*min.
+      const valid = [facadeScore, aerialScore].filter((s) => s >= 0);
+      const combined = valid.length
+        ? Math.round(0.65 * Math.max(...valid) + 0.35 * Math.min(...valid))
         : 0;
 
       return {
@@ -381,10 +393,16 @@ export async function adjudicateStreetMatches(
   const labels: string[] = [];
   listingRefs.forEach((i) => { labels.push(`Listing photo ${i}:`); images.push(listingImage(listing.photoUrls[i - 1])); });
   top.forEach((m, i) => {
-    const svImg = cachedMapImage(m.house.svKey);
-    if (svImg) {
-      labels.push(`Candidate ${LETTERS[i]} (${m.house.address}) — Street View:`);
-      images.push(svImg);
+    // Head-on plus the opposite (across-street) heading, which matches the
+    // background of outward-facing listing photos.
+    const shots = m.house.svKeys?.length ? m.house.svKeys : [{ key: m.house.svKey, label: "head-on" }];
+    const chosen = shots.filter((s) => /head-on|opposite/.test(s.label));
+    for (const s of (chosen.length ? chosen : shots.slice(0, 1))) {
+      const img = cachedMapImage(s.key);
+      if (img) {
+        labels.push(`Candidate ${LETTERS[i]} (${m.house.address}) — Street View ${s.label}:`);
+        images.push(img);
+      }
     }
     const satImg = cachedMapImage(m.house.satKey);
     if (satImg) {

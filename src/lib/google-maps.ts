@@ -168,6 +168,53 @@ export async function fetchStreetViewAimedAt(
   };
 }
 
+export interface StreetViewShot {
+  key: string;
+  heading: number;
+  label: string;
+}
+
+/**
+ * Capture several Street View headings from the nearest pano to a target:
+ *   - straight on (bearing to the house)
+ *   - angled ±offset (catches houses set back behind walls/trees, seen obliquely)
+ *   - the OPPOSITE direction (the across-the-road streetscape that appears in
+ *     the background of listing photos shot from inside looking out)
+ * One metadata lookup, N cached image fetches. Returns [] if no coverage.
+ */
+export async function fetchStreetViewHeadings(
+  targetLat: number,
+  targetLng: number,
+  fov: number = 90
+): Promise<{ shots: StreetViewShot[]; panoDate: string | null }> {
+  const meta = await fetchStreetViewMetadata(targetLat, targetLng);
+  if (!meta) return { shots: [], panoDate: null };
+
+  const toHouse = Math.round(bearingBetween(meta.panoLat, meta.panoLng, targetLat, targetLng));
+  const plan: { heading: number; label: string }[] = [
+    { heading: toHouse, label: "head-on" },
+    { heading: (toHouse + 40) % 360, label: "angled-right" },
+    { heading: (toHouse + 320) % 360, label: "angled-left" },
+    { heading: (toHouse + 180) % 360, label: "opposite (across-street view)" },
+  ];
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const shots: StreetViewShot[] = [];
+  for (const p of plan) {
+    const key = cacheKey("svaim", `${meta.panoId},${p.heading},${fov}`);
+    if (!getCached(key)) {
+      const url =
+        `https://maps.googleapis.com/maps/api/streetview?` +
+        `pano=${meta.panoId}&heading=${p.heading}&size=640x480&pitch=0&fov=${fov}&key=${apiKey}`;
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      setCache(key, Buffer.from(await response.arrayBuffer()));
+    }
+    shots.push({ key, heading: p.heading, label: p.label });
+  }
+  return { shots, panoDate: meta.date };
+}
+
 export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;
   const φ1 = (lat1 * Math.PI) / 180;
