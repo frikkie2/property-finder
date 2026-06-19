@@ -1,31 +1,47 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import SuburbSelect from "./SuburbSelect";
 
-interface IndexSummary { slug: string; street: string; suburb: string; houseCount: number; }
+/**
+ * Downscale a photo in the browser before upload: long edge <= 1600px, JPEG
+ * quality 0.85. Phone photos are 4-8MB; this brings them to a few hundred KB,
+ * which keeps the upload under body limits and is the right size for the AI.
+ * Falls back to the original file if anything goes wrong.
+ */
+async function downscale(file: File, maxEdge = 1600, quality = 0.85): Promise<File> {
+  try {
+    if (!file.type.startsWith("image/")) return file;
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    if (scale === 1 && file.size < 1_500_000) return file; // already small enough
+    const w = Math.round(bitmap.width * scale);
+    const h = Math.round(bitmap.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/jpeg", quality));
+    if (!blob) return file;
+    const name = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+    return new File([blob], name, { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
 
 export default function PhotoUploadInput() {
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
-  const [suburb, setSuburb] = useState("");
+  const [suburbs, setSuburbs] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [indexes, setIndexes] = useState<IndexSummary[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    fetch("/api/index-street")
-      .then((r) => r.json())
-      .then((d) => {
-        const list: IndexSummary[] = d.indexes ?? [];
-        setIndexes(list);
-        if (list.length === 1) setSuburb(list[0].suburb);
-      })
-      .catch(() => {});
-  }, []);
 
   function addFiles(list: FileList | null) {
     if (!list) return;
@@ -43,13 +59,13 @@ export default function PhotoUploadInput() {
 
   async function handleSubmit() {
     if (files.length === 0) { setError("Add at least one photo."); return; }
-    if (!suburb) { setError("Choose the suburb."); return; }
+    if (suburbs.length === 0) { setError("Choose at least one suburb."); return; }
     setError(null);
     setLoading(true);
     try {
       const fd = new FormData();
-      files.forEach((f) => fd.append("photos", f));
-      fd.append("suburb", suburb);
+      for (const f of files) fd.append("photos", await downscale(f));
+      suburbs.forEach((s) => fd.append("suburb", s));
       fd.append("description", description);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const data = await res.json();
@@ -98,31 +114,15 @@ export default function PhotoUploadInput() {
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-2">
-        <select
-          value={suburb}
-          onChange={(e) => setSuburb(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
-        >
-          <option value="">Select indexed area…</option>
-          {Array.from(new Set(indexes.map((i) => i.suburb))).map((sub) => {
-            const streets = indexes.filter((i) => i.suburb === sub);
-            const houses = streets.reduce((n, i) => n + i.houseCount, 0);
-            return (
-              <option key={sub} value={sub}>
-                {sub} — {streets.map((s) => s.street).join(", ")} ({houses} houses)
-              </option>
-            );
-          })}
-        </select>
-        <input
-          type="text"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Optional: paste the listing description (helps matching)"
-          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
-        />
-      </div>
+      <SuburbSelect selected={suburbs} onChange={setSuburbs} />
+
+      <input
+        type="text"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Optional: paste the listing description (helps matching)"
+        className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
+      />
 
       <button
         onClick={handleSubmit}
@@ -133,11 +133,6 @@ export default function PhotoUploadInput() {
       </button>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {indexes.length === 0 && (
-        <p className="text-xs text-amber-600">
-          No streets are indexed yet — a street has to be decoded before photos can be matched against it.
-        </p>
-      )}
     </div>
   );
 }

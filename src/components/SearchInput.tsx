@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import SuburbSelect from "./SuburbSelect";
 
 export default function SearchInput() {
   const [url, setUrl] = useState("");
+  const [suburbs, setSuburbs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -14,13 +16,17 @@ export default function SearchInput() {
       setError("Please enter a Property24 URL.");
       return;
     }
+    if (suburbs.length === 0) {
+      setError("Pick at least one suburb to search in.");
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify({ url: url.trim(), suburbs }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -62,6 +68,9 @@ export default function SearchInput() {
         >
           {loading ? "Searching…" : "Search"}
         </button>
+      </div>
+      <div className="mt-3">
+        <SuburbSelect selected={suburbs} onChange={setSuburbs} />
       </div>
       {error && (
         <p className="mt-2 text-sm text-red-600">{error}</p>

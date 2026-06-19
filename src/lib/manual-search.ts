@@ -1,7 +1,6 @@
 import type { ListingData, SearchProgress } from "./types";
 import {
   getDb,
-  getSearch,
   updateSearchStatus,
   updateSearchFingerprint,
   updateSearchProgressDetail,
@@ -10,31 +9,37 @@ import {
   upsertCandidate,
 } from "./db";
 import { extractFeaturesFromListing } from "./feature-extractor";
-import { listStreetIndexes, matchListingToIndexes, adjudicateStreetMatches, type StreetMatch } from "./street-index";
-import { normalizeSuburbName } from "./suburb-data";
-import { fetchSatelliteImage } from "./google-maps";
+import { listStreetIndexes, matchListingToIndexes, adjudicateStreetMatches } from "./street-index";
 
 /**
  * Manual photo search: fingerprint the uploaded photos, then match them
  * against the available street indexes (the decoded streets). Falls back with
  * a clear error if no index covers the chosen suburb.
  */
-export async function runManualPhotoSearch(searchId: string, listing: ListingData): Promise<void> {
+export async function runManualPhotoSearch(
+  searchId: string,
+  listing: ListingData,
+  targetSuburbs?: string[]
+): Promise<void> {
   function emit(status: SearchProgress["status"], message: string, detail: string | null, pct: number) {
     getDb().prepare("UPDATE searches SET status = ? WHERE id = ?").run(status, searchId);
     updateSearchProgressDetail(searchId, JSON.stringify({ stage: status, message, detail, percentage: pct }));
   }
 
   try {
-    appendPipelineLog(searchId, { stage: "manual_upload", suburb: listing.listedSuburb, photos: listing.photoUrls.length });
+    appendPipelineLog(searchId, { stage: "match_start", suburbs: targetSuburbs, photos: listing.photoUrls.length });
 
-    // Which street indexes apply? Prefer those in the chosen suburb; else use all.
+    // Which street indexes apply? Use the explicitly chosen suburb(s) if given;
+    // otherwise fall back to the listing's suburb, then to every index.
     const all = listStreetIndexes();
     if (all.length === 0) {
-      throw new Error("No streets have been indexed yet. Decode a street first, then upload photos to match against it.");
+      throw new Error("No streets have been indexed yet. Decode a street first, then search against it.");
     }
-    const suburbNorm = (listing.listedSuburb || "").toLowerCase();
-    const scoped = all.filter((ix) => ix.suburb.toLowerCase() === suburbNorm);
+    const wanted = (targetSuburbs && targetSuburbs.length
+      ? targetSuburbs
+      : [listing.listedSuburb]
+    ).map((s) => (s || "").toLowerCase()).filter(Boolean);
+    const scoped = all.filter((ix) => wanted.includes(ix.suburb.toLowerCase()));
     const indexes = scoped.length ? scoped : all;
     const totalHouses = indexes.reduce((n, ix) => n + ix.houses.length, 0);
 
@@ -73,24 +78,22 @@ export async function runManualPhotoSearch(searchId: string, listing: ListingDat
         center: { latitude: m.house.lat, longitude: m.house.lng },
         address: m.house.address,
         score: m.score,
-        aerialScore: undefined,
-        streetScore: m.score,
+        aerialScore: m.aerialScore,
+        streetScore: m.facadeScore,
         reasoning: m.reasoning,
         matchingFeatures: m.matchingFeatures,
         differences: m.differences,
         streetViewImageUrl: `/api/images/${m.house.svKey}`,
-        satelliteImageUrl: null,
+        satelliteImageUrl: m.house.satKey ? `/api/images/${m.house.satKey}` : null,
       }))
     );
 
-    // Persist top 5 with a satellite close-up for the comparison view.
+    // Persist a wider shortlist (top 15) so a mid-ranked correct house is still
+    // visible for human review when the matcher isn't confident.
     getDb().prepare("DELETE FROM candidates WHERE search_id = ?").run(searchId);
-    const top = ranked.slice(0, 5);
+    const top = ranked.slice(0, 15);
     for (const m of top) {
-      let satKey: string | null = null;
-      try {
-        satKey = (await fetchSatelliteImage(m.house.lat, m.house.lng, 20, "640x640", 2)).key;
-      } catch { /* satellite is display-only */ }
+      const satKey = m.house.satKey;
       const level = m.score >= 70 ? "high" : m.score >= 45 ? "medium" : "low";
       // Show BOTH number signals; the satellite/Street View pin is the truth.
       const streetPart = m.house.address.replace(/^\d+[A-Za-z]?\s*/, "");
@@ -105,8 +108,8 @@ export async function runManualPhotoSearch(searchId: string, listing: ListingDat
         longitude: m.house.lng,
         confidenceScore: m.score,
         confidenceLevel: level,
-        satelliteMatchScore: 0,
-        streetviewMatchScore: m.score,
+        satelliteMatchScore: Math.max(0, m.aerialScore),
+        streetviewMatchScore: Math.max(0, m.facadeScore),
         featureMatches: JSON.stringify([
           ...m.matchingFeatures.map((f) => ({ feature: f, matched: true, source: "street_view", notes: null })),
           ...m.differences.map((d) => ({ feature: d, matched: false, source: "street_view", notes: null })),

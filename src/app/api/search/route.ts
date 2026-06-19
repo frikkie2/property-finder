@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runSearchPipeline } from "@/lib/search-pipeline";
-import { getSearchHistory, createSearch } from "@/lib/db";
+import { createSearch, getSearchHistory, updateSearchListingData, getDb } from "@/lib/db";
+import { extractListingFromUrl } from "@/lib/listing-extractor";
+import { runManualPhotoSearch } from "@/lib/manual-search";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { url } = body;
+  const { url, suburbs } = body as { url?: string; suburbs?: string[] };
 
   if (!url || !url.includes("property24")) {
     return NextResponse.json(
@@ -13,25 +14,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Create search record immediately so we have an ID
   const searchId = createSearch(url, "", {});
+  getDb().prepare("UPDATE searches SET status = ? WHERE id = ?").run("extracting_listing", searchId);
 
-  // Run pipeline in the background — don't await
-  console.log("[SEARCH] Starting pipeline for:", url, "searchId:", searchId);
-  runSearchPipeline(url, searchId).then((result) => {
-    console.log("[SEARCH] Pipeline complete:", result.status, "candidates:", result.candidates.length);
-  }).catch((err) => {
-    console.error("[SEARCH] Pipeline error:", err);
-  });
+  // Scrape the listing, then match its photos against the chosen indexed
+  // suburb(s) — the same street-index matcher used for manual uploads.
+  (async () => {
+    try {
+      const listing = await extractListingFromUrl(url);
+      updateSearchListingData(searchId, JSON.stringify(listing));
+      getDb().prepare("UPDATE searches SET listed_suburb = ? WHERE id = ?").run(listing.listedSuburb, searchId);
+      await runManualPhotoSearch(searchId, listing, suburbs);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      console.error("[SEARCH] error:", message);
+      getDb().prepare("UPDATE searches SET status = 'failed', error_message = ? WHERE id = ?").run(message, searchId);
+    }
+  })();
 
-  // Return immediately so the UI can redirect to the progress page
-  return NextResponse.json({
-    id: searchId,
-    status: "extracting_listing",
-  });
+  return NextResponse.json({ id: searchId, status: "extracting_listing" });
 }
 
 export async function GET() {
-  const history = getSearchHistory(20);
-  return NextResponse.json(history);
+  return NextResponse.json(getSearchHistory(20));
 }

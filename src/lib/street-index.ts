@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { geocodeAddress, fetchStreetViewAimedAt, haversineMeters } from "./google-maps";
+import { geocodeAddress, fetchStreetViewAimedAt, fetchSatelliteImage, haversineMeters } from "./google-maps";
 import { MODELS, base64Image, listingImage, mapWithConcurrency, visionJson, type ImageInput } from "./claude";
 import type { ListingData, PropertyFingerprint } from "./types";
 
@@ -21,6 +21,7 @@ export interface IndexedHouse {
   lat: number;
   lng: number;
   svKey: string;        // cached Street View image (served via /api/images/<key>)
+  satKey: string | null; // cached satellite close-up (overhead) for aerial matching
   svDate: string | null;
   facade: string;       // one-paragraph description of the street-facing facade
   features: string[];   // distinctive permanent features
@@ -40,6 +41,25 @@ export interface StreetIndex {
 }
 
 const INDEX_DIR = path.join(process.cwd(), ".cache", "street-index");
+const MAPS_DIR = path.join(process.cwd(), ".cache", "maps");
+
+/**
+ * Load a cached Street View / satellite image with the CORRECT media type.
+ * Google satellite tiles are PNG, Street View is JPEG — both are stored with a
+ * .jpg extension, so detect from the magic bytes (Anthropic 400s on a mismatch).
+ */
+function cachedMapImage(key: string | null | undefined): ImageInput | null {
+  if (!key) return null;
+  const file = path.join(MAPS_DIR, `${key}.jpg`);
+  if (!fs.existsSync(file)) return null;
+  const buf = fs.readFileSync(file);
+  const mt: "image/png" | "image/jpeg" | "image/webp" =
+    buf[0] === 0x89 && buf[1] === 0x50 ? "image/png"
+    : buf[0] === 0xff && buf[1] === 0xd8 ? "image/jpeg"
+    : buf[0] === 0x52 && buf[1] === 0x49 ? "image/webp"
+    : "image/png";
+  return base64Image(buf.toString("base64"), mt);
+}
 
 export function streetSlug(street: string, suburb: string): string {
   return `${street}-${suburb}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -121,6 +141,12 @@ export async function buildStreetIndex(
       const sv = await fetchStreetViewAimedAt(geo.lat, geo.lng);
       if (!sv) return null;
 
+      // Overhead close-up for aerial matching (pool, paving, roof, trees).
+      let satKey: string | null = null;
+      try {
+        satKey = (await fetchSatelliteImage(geo.lat, geo.lng, 20, "640x640", 2)).key;
+      } catch { /* satellite optional */ }
+
       const reply = await visionJson<FacadeReply>({
         model: MODELS.fingerprint,
         images: [base64Image(sv.base64, sv.mediaType)],
@@ -155,6 +181,7 @@ Respond ONLY with JSON:
         lat: geo.lat,
         lng: geo.lng,
         svKey: sv.key,
+        satKey,
         svDate: sv.panoDate,
         facade: reply.facade,
         features: reply.features ?? [],
@@ -181,7 +208,9 @@ Respond ONLY with JSON:
 
 export interface StreetMatch {
   house: IndexedHouse;
-  score: number;
+  score: number;        // combined facade + aerial
+  facadeScore: number;  // street-view facade match (-1 if not assessable)
+  aerialScore: number;  // satellite/overhead match (-1 if no satellite)
   reasoning: string;
   matchingFeatures: string[];
   differences: string[];
@@ -192,6 +221,11 @@ interface MatchReply {
   reasoning: string;
   matchingFeatures: string[];
   differences: string[];
+}
+
+interface AerialReply {
+  score: number;
+  reasoning: string;
 }
 
 /**
@@ -213,50 +247,96 @@ export async function matchListingToIndexes(
 
   const houses = indexes.flatMap((ix) => ix.houses);
 
+  // For the aerial signal, send a broader set of listing photos (pool, garden,
+  // paving, roofline are spread across the set, not just the facade picks).
+  const aerialRefUrls = listing.photoUrls.slice(0, 5);
+  const aerialRefImages: ImageInput[] = aerialRefUrls.map(listingImage);
+  const aerialSummary = fingerprint.aerial?.summary ?? "";
+  const cues = fingerprint.exteriorCues ?? [];
+
   const results = await mapWithConcurrency(
     houses,
     6,
     async (house): Promise<StreetMatch | null> => {
-      const svFile = path.join(process.cwd(), ".cache", "maps", `${house.svKey}.jpg`);
-      if (!fs.existsSync(svFile)) return null;
-      const svB64 = fs.readFileSync(svFile).toString("base64");
+      const svImg = cachedMapImage(house.svKey);
+      if (!svImg) return null;
 
-      const reply = await visionJson<MatchReply>({
+      // --- Signal 1: street-side comparison via exterior CUES ---
+      // Listings are often interior-heavy with only glimpses of the outside, so
+      // instead of demanding a full facade we check how many distinctive
+      // exterior cues (lamp pole, boundary wall colour, a specific tree,
+      // neighbour features…) are corroborated by this Street View.
+      const facadeP = visionJson<MatchReply>({
         model: MODELS.compare,
-        images: [...facadeImages, base64Image(svB64, "image/jpeg")],
+        images: [...facadeImages, svImg],
         labels: [
           ...facadeRefs.map((_, i) => `Listing photo ${i + 1}:`),
           `Street View of ${house.address}${house.svDate ? ` (${house.svDate})` : ""}:`,
         ],
-        prompt: `The first image(s) are listing photos of ONE house's street frontage. The LAST image is Google Street View of a candidate address. Decide if they are the SAME house.
+        prompt: `The first image(s) are listing photos of ONE property — they may show the full street facade, OR only interior rooms with small glimpses of the outside (through windows/doors, in backgrounds, at edges). The LAST image is Google Street View of a candidate address.
 
-Go feature by feature and compare every visible attribute:
-- STOREYS: single vs double storey. This is a HARD discriminator — a single-storey house can never match a double-storey one.
-- ROOF: type (tile/sheet/flat), colour, shape (hipped/gable), and any fascia/gutter colour.
-- WALLS: material (face brick/plaster), colour.
-- BOUNDARY: wall vs palisade vs combination; its colour; infill (solid/slatted/spear-top/horizontal bar); whether it has a brick base wall or sits low at ground level.
-- GATE: style, colour, material, sliding vs swing.
-- GARAGE/CARPORT: count, position, colour.
-- WINDOWS: arrangement, burglar bars.
-- DRIVEWAY/PAVEMENT: paving material and pattern.
-- GARDEN: distinctive plants (palms, cycads), large trees and their position.
-- DISTINCTIVE: postbox, wall cross, decorative discs, pergola/gazebo, balcony, dormer/clerestory, house number.
+The property's distinctive EXTERIOR CUES (mined from all its photos) are:
+${(cues.length ? cues.map((c, i) => `  ${i + 1}. ${c}`).join("\n") : "  (none extracted)")}
 
-Street View may be a few years older than the listing: paint and plants can change, but STRUCTURE (storeys, roof shape, boundary type, garage position, window layout) does not. If storeys differ, score <=20 regardless of other similarities.
+Also use the facade signature if the listing shows the front: """${fingerprint.facade?.summary || ""}"""
 
-Score 0-100: 0-20 clearly different (incl. storey mismatch); 21-45 unlikely; 46-65 possible; 66-85 likely same; 86-100 definitely same.
+Your job: judge how strongly THIS Street View corroborates the property. Go cue by cue — is each one present / plausibly present / clearly absent or contradicted? A municipal lamp pole, a specific boundary-wall colour+material, a distinctive tree by the gate, or a neighbour's feature appearing here is strong support; a hard contradiction (e.g. cue says low face-brick wall, this is a tall white plaster wall; or storeys differ) is strong evidence against.
 
-Respond ONLY with JSON:
-{"score": number, "reasoning": "what is decisive", "matchingFeatures": ["..."], "differences": ["..."]}`,
-        maxTokens: 600,
-      });
+Street View may predate the listing (paint/plants change; structure, walls, poles, mature trees do not).
+Score 0-100 by weight of corroboration: 0-20 contradicted; 21-45 little/no support; 46-65 some cues match; 66-85 several distinctive cues match; 86-100 multiple distinctive cues clearly match. Use the FULL range — do not default to a middle value.
+Respond ONLY JSON: {"score": number, "reasoning": "which cues matched/contradicted", "matchingFeatures": ["cues corroborated"], "differences": ["cues contradicted"]}`,
+        maxTokens: 700,
+      }).catch(() => null);
+
+      // --- Signal 2: satellite / overhead comparison ---
+      const satImg = cachedMapImage(house.satKey);
+      const aerialP: Promise<AerialReply | null> = satImg
+        ? visionJson<AerialReply>({
+            model: MODELS.compare,
+            images: [...aerialRefImages, satImg],
+            labels: [
+              ...aerialRefUrls.map((_, i) => `Listing photo ${i + 1}:`),
+              `Satellite (overhead) of ${house.address}:`,
+            ],
+            prompt: `The first image(s) are listing photos of a property (may show pool, garden, patio, driveway, carport, roof — not necessarily the street). The LAST image is a Google satellite (overhead) view of a candidate stand.
+
+Judge whether the listing property could be THIS stand seen from above. Reason about overhead-visible features:
+- SWIMMING POOL: present? shape and rough position on the stand?
+- PAVING/DRIVEWAY: extent, pattern, courtyard paving.
+- ROOF footprint: shape (L/T/rectangle), carport/flat sections, colour.
+- TREES: large canopy trees and their position.
+- STAND layout: house position, open garden areas, outbuildings/lapa.
+${aerialSummary ? `Expected overhead signature from the listing: "${aerialSummary}"` : ""}
+
+If the listing photos give no overhead-relevant cues at all, return score -1.
+Score: -1 no aerial cues; 0-20 contradicts (e.g. listing has a pool, this stand has none); 21-45 unlikely; 46-65 possible; 66-85 likely; 86-100 strong overhead match.
+Respond ONLY JSON: {"score": number, "reasoning": "..."}`,
+            maxTokens: 400,
+          }).catch(() => null)
+        : Promise.resolve(null);
+
+      const [facadeR, aerialR] = await Promise.all([facadeP, aerialP]);
+
+      const facadeScore = typeof facadeR?.score === "number" ? facadeR.score : -1;
+      const aerialScore = typeof aerialR?.score === "number" ? aerialR.score : -1;
+
+      // Combine: drop unassessable signals, weight aerial a touch higher (it is
+      // the discriminator when the listing has no street-facing photo).
+      const parts: { w: number; v: number }[] = [];
+      if (facadeScore >= 0) parts.push({ w: 0.5, v: facadeScore });
+      if (aerialScore >= 0) parts.push({ w: 0.5, v: aerialScore });
+      const combined = parts.length
+        ? Math.round(parts.reduce((s, p) => s + p.w * p.v, 0) / parts.reduce((s, p) => s + p.w, 0))
+        : 0;
 
       return {
         house,
-        score: Math.max(0, Math.min(100, reply.score ?? 0)),
-        reasoning: reply.reasoning ?? "",
-        matchingFeatures: reply.matchingFeatures ?? [],
-        differences: reply.differences ?? [],
+        score: combined,
+        facadeScore,
+        aerialScore,
+        reasoning: [facadeR?.reasoning && `Facade: ${facadeR.reasoning}`, aerialR?.reasoning && `Aerial: ${aerialR.reasoning}`].filter(Boolean).join(" | "),
+        matchingFeatures: facadeR?.matchingFeatures ?? [],
+        differences: facadeR?.differences ?? [],
       };
     },
     onProgress
@@ -292,44 +372,90 @@ export async function adjudicateStreetMatches(
     .slice(0, 3);
   const facadeRefs = idx.length ? idx.map((i) => listing.photoUrls[i - 1]) : listing.photoUrls.slice(0, 3);
 
+  // Show MORE listing photos here (garden/pool/aerial cues matter), plus each
+  // candidate's Street View AND satellite image.
+  const listingRefs = [...new Set([...idx, 1, 2, 3, 4, 5])]
+    .filter((i) => i >= 1 && i <= listing.photoUrls.length)
+    .slice(0, 6);
   const images: ImageInput[] = [];
   const labels: string[] = [];
-  facadeRefs.forEach((u, i) => { labels.push(`Listing photo ${i + 1}:`); images.push(listingImage(u)); });
+  listingRefs.forEach((i) => { labels.push(`Listing photo ${i}:`); images.push(listingImage(listing.photoUrls[i - 1])); });
   top.forEach((m, i) => {
-    const file = path.join(process.cwd(), ".cache", "maps", `${m.house.svKey}.jpg`);
-    if (fs.existsSync(file)) {
-      labels.push(`Candidate ${LETTERS[i]} — ${m.house.address}:`);
-      images.push(base64Image(fs.readFileSync(file).toString("base64"), "image/jpeg"));
+    const svImg = cachedMapImage(m.house.svKey);
+    if (svImg) {
+      labels.push(`Candidate ${LETTERS[i]} (${m.house.address}) — Street View:`);
+      images.push(svImg);
+    }
+    const satImg = cachedMapImage(m.house.satKey);
+    if (satImg) {
+      labels.push(`Candidate ${LETTERS[i]} — Satellite (overhead):`);
+      images.push(satImg);
     }
   });
 
-  const reply = await visionJson<{ ranking: { candidate: string; confidence: number; verdict: string }[] }>({
-    model: MODELS.adjudicate,
-    images,
-    labels,
-    prompt: `The first image(s) are listing photos of ONE house. The remaining images are Street View of candidate addresses (A, B, C…) on the same street.
+  const cues = fingerprint.exteriorCues ?? [];
+  const prompt = `The first image(s) are listing photos of ONE property (they may show the street facade, OR only interior rooms with small glimpses of the outside, OR garden/pool/patio). For each candidate (A, B, C…) you get a Street View and a Satellite (overhead) image.
 
-Identify which candidate, if any, is the SAME house as the listing. Compare storeys (hard discriminator), roof shape/colour, boundary wall/fence type+colour, gate, garage position, window layout, driveway, distinctive features. Street View may predate the listing (paint/plants change; structure does not).
+The property's distinctive EXTERIOR CUES (mined from all its photos):
+${cues.length ? cues.map((c, i) => `  ${i + 1}. ${c}`).join("\n") : "  (none extracted)"}
+
+Identify which candidate, if any, is the SAME property. Use ALL evidence:
+- Exterior cues above — does the candidate's Street View show that lamp pole / boundary-wall colour / specific tree / neighbour feature?
+- Street View: storeys (hard discriminator), roof, boundary wall/fence type+colour, gate, garage/carport, windows, driveway, distinctive objects.
+- Satellite: swimming pool (presence/shape/position), paving/courtyard, roof footprint, large trees, stand layout.
+Weight DISTINCTIVE matches (a specific pole, an unusual wall colour, a kidney pool in the right spot) far more than generic ones (has a wall, has a pool — most houses do). Street View/satellite may predate the listing (paint/plants change; structure, walls, poles, pools do not).
 
 Rank ALL candidates best to worst with a calibrated confidence 0-100 each:
-- 85+ certain same house; 65-84 strong; 40-64 plausible; <40 weak/contradicted (use <20 if storeys differ).
+- 85+ certain same property; 65-84 strong; 40-64 plausible; <40 weak/contradicted.
 If none is a real match, every confidence should be low and say so.
 
 Respond ONLY with JSON:
-{"ranking": [{"candidate": "A", "confidence": number, "verdict": "decisive evidence"}]}`,
-    maxTokens: 1500,
-  });
+{"ranking": [{"candidate": "A", "confidence": number, "verdict": "decisive evidence from facade and/or overhead"}]}`;
 
-  const byLetter = new Map(top.map((m, i) => [LETTERS[i], m]));
-  const out: AdjudicatedMatch[] = [];
-  let rank = 1;
-  for (const r of reply.ranking ?? []) {
-    const m = byLetter.get((r.candidate || "").trim().toUpperCase());
-    if (!m) continue;
-    out.push({ ...m, score: Math.max(0, Math.min(100, r.confidence ?? m.score)), reasoning: r.verdict || m.reasoning, rank: rank++ });
-    byLetter.delete((r.candidate || "").trim().toUpperCase());
+  // Best-of-3 voting: the single-pass ranking is noisy (it has flipped between
+  // two lookalike neighbours run-to-run). Run the adjudication 3× and average
+  // each candidate's confidence to get a stable ranking.
+  const ROUNDS = 3;
+  const runs = await mapWithConcurrency(
+    Array.from({ length: ROUNDS }, (_, i) => i),
+    ROUNDS,
+    () =>
+      visionJson<{ ranking: { candidate: string; confidence: number; verdict: string }[] }>({
+        model: MODELS.adjudicate,
+        images,
+        labels,
+        prompt,
+        maxTokens: 1500,
+      })
+  );
+
+  // Aggregate per candidate letter: average confidence across the rounds it
+  // appeared in; keep the verdict from its highest-confidence round.
+  const agg = new Map<string, { sum: number; n: number; bestConf: number; verdict: string }>();
+  for (const run of runs) {
+    if (!run) continue;
+    for (const r of run.ranking ?? []) {
+      const letter = (r.candidate || "").trim().toUpperCase();
+      if (!byLetterExists(top, letter)) continue;
+      const conf = Math.max(0, Math.min(100, r.confidence ?? 0));
+      const cur = agg.get(letter) ?? { sum: 0, n: 0, bestConf: -1, verdict: "" };
+      cur.sum += conf;
+      cur.n += 1;
+      if (conf > cur.bestConf) { cur.bestConf = conf; cur.verdict = r.verdict || ""; }
+      agg.set(letter, cur);
+    }
   }
-  // Append any not mentioned, lowest.
-  for (const [, m] of byLetter) out.push({ ...m, rank: rank++ });
-  return out;
+
+  const scored = top.map((m, i) => {
+    const a = agg.get(LETTERS[i]);
+    const avg = a && a.n > 0 ? Math.round(a.sum / a.n) : m.score;
+    return { ...m, score: avg, reasoning: a?.verdict || m.reasoning } as StreetMatch;
+  });
+  scored.sort((x, y) => y.score - x.score);
+  return scored.map((m, i) => ({ ...m, rank: i + 1 }));
+}
+
+function byLetterExists(top: StreetMatch[], letter: string): boolean {
+  const idx = LETTERS.indexOf(letter);
+  return idx >= 0 && idx < top.length;
 }

@@ -9,15 +9,17 @@ import { v4 as uuidv4 } from "uuid";
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const files = formData.getAll("photos") as File[];
-  const suburb = ((formData.get("suburb") as string) || "").trim();
+  // One or more suburbs (repeated "suburb" form fields).
+  const suburbs = (formData.getAll("suburb") as string[]).map((s) => (s || "").trim()).filter(Boolean);
   const description = ((formData.get("description") as string) || "").trim();
 
   if (!files || files.length === 0) {
     return NextResponse.json({ error: "Please attach at least one photo." }, { status: 400 });
   }
-  if (!suburb) {
-    return NextResponse.json({ error: "Please choose the suburb." }, { status: 400 });
+  if (suburbs.length === 0) {
+    return NextResponse.json({ error: "Please choose at least one suburb." }, { status: 400 });
   }
+  const suburb = suburbs[0];
 
   const searchId = createSearch("manual-upload", suburb, {});
 
@@ -59,7 +61,7 @@ export async function POST(request: NextRequest) {
   getDb().prepare("UPDATE searches SET listed_suburb = ?, status = ? WHERE id = ?").run(suburb, "analysing_photos", searchId);
 
   // Run in the background; the results page polls.
-  runManualPhotoSearch(searchId, listing).catch((err) =>
+  runManualPhotoSearch(searchId, listing, suburbs).catch((err) =>
     console.error("[UPLOAD] pipeline error:", err)
   );
 

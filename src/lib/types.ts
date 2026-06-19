@@ -47,6 +47,8 @@ export interface PropertyFingerprint {
   aerial: AerialSignature | null;
   /** What this property looks like from the street — drives Street View comparison. */
   facade: FacadeSignature | null;
+  /** Distinctive locatable exterior fragments mined from all photos (incl. interiors). */
+  exteriorCues: string[];
 }
 
 export interface AerialSignature {

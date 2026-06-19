@@ -27,6 +27,15 @@ IMPORTANT: the listing description is AUTHORITATIVE for hard features. If it men
 
 3. FACADE SIGNATURE — what this house looks like from THE STREET. Wall material and colour, roof type/colour, storeys, gate and fence style, garage door count/colour, window pattern, driveway, distinctive permanent features. Also state which photo numbers best show the street facade (front of house as visible from the road) — these will be compared against Street View. Exclude interior shots, back gardens and aerial shots.
 
+4. EXTERIOR CUES (CRITICAL — works even when there is NO clear facade photo). Listings are often mostly interior shots with only small glimpses of the outside — through a window, an open door, behind furniture, at the edge of a frame, reflected, or in the background of a garden/braai/pool photo. Scour EVERY photo (including interiors) for ANY permanent outdoor element that could be matched on Google Street View from the road, and list each as a specific, locatable cue:
+- Street furniture: municipal lamp/light pole, Telkom/fibre pole, electricity pole, transformer box, fire hydrant, post box, street name sign, traffic-calming.
+- Boundary: wall vs fence type, material, COLOUR, approximate height; gate style/colour/material; pillars; spikes/electric strands.
+- Distinctive trees/plants on or just outside the stand: type (palm, jacaranda, pine, cycad), size, and POSITION relative to the gate/house.
+- Neighbouring properties visible: their wall/roof colour, double-storey next door, a face-brick house opposite, etc.
+- The street itself glimpsed through a gate/window: tarred vs gravel, kerb, pavement, opposite-side features, a hill/koppie or water tower on the horizon.
+- Paving/driveway texture and pattern, carport structure, anything bolted-down and permanent.
+List the 5-12 MOST distinctive and locatable cues. Each must be concrete enough to look for on Street View ("tall concrete municipal lamp pole immediately left of the driveway", not "a pole"). Skip anything movable (cars, bins unless numbered, pot plants, furniture).
+
 Respond with ONLY valid JSON:
 {
   "houseNumber": null | "string (only if actually visible in a photo)",
@@ -61,7 +70,8 @@ Respond with ONLY valid JSON:
   "facade": {
     "summary": "one paragraph describing the house exactly as Street View would see it from the road",
     "bestPhotoIndexes": [numbers, 1-indexed, best first, max 3]
-  }
+  },
+  "exteriorCues": ["5-12 specific, locatable exterior cues mined from ALL photos incl. interiors — see item 4"]
 }`;
 }
 
@@ -86,6 +96,7 @@ export function normalizeFingerprint(raw: Record<string, unknown>): PropertyFing
     quickWins: r.quickWins ?? [],
     aerial: r.aerial ?? null,
     facade: r.facade ?? null,
+    exteriorCues: Array.isArray(r.exteriorCues) ? r.exteriorCues : [],
   };
 }
 
