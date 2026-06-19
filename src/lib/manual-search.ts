@@ -10,7 +10,7 @@ import {
   upsertCandidate,
 } from "./db";
 import { extractFeaturesFromListing } from "./feature-extractor";
-import { listStreetIndexes, matchListingToIndexes, type StreetMatch } from "./street-index";
+import { listStreetIndexes, matchListingToIndexes, adjudicateStreetMatches, type StreetMatch } from "./street-index";
 import { normalizeSuburbName } from "./suburb-data";
 import { fetchSatelliteImage } from "./google-maps";
 
@@ -55,10 +55,21 @@ export async function runManualPhotoSearch(searchId: string, listing: ListingDat
 
     appendPipelineLog(searchId, { stage: "street_match_complete", compared: matches.length, topScore: matches[0]?.score ?? 0 });
 
-    // Debug payload: every compared house
+    // Head-to-head adjudication of the top candidates → calibrated ranking.
+    emit("ranking_results", "Adjudicating top candidates head-to-head...", null, 88);
+    const adjudicated = await adjudicateStreetMatches(matches, listing, fingerprint);
+    // Use the adjudicated ranking/scores for the leaders; keep the rest below.
+    const adjudicatedKeys = new Set(adjudicated.map((a) => a.house.svKey));
+    const ranked = [
+      ...adjudicated,
+      ...matches.filter((m) => !adjudicatedKeys.has(m.house.svKey)),
+    ];
+    appendPipelineLog(searchId, { stage: "adjudication_complete", top: ranked[0] ? `${ranked[0].house.address} ${ranked[0].score}%` : null });
+
+    // Debug payload: every compared house (adjudicated leaders first)
     saveBuildingsFound(
       searchId,
-      matches.map((m) => ({
+      ranked.map((m) => ({
         center: { latitude: m.house.lat, longitude: m.house.lng },
         address: m.house.address,
         score: m.score,
@@ -74,7 +85,7 @@ export async function runManualPhotoSearch(searchId: string, listing: ListingDat
 
     // Persist top 5 with a satellite close-up for the comparison view.
     getDb().prepare("DELETE FROM candidates WHERE search_id = ?").run(searchId);
-    const top = matches.slice(0, 5);
+    const top = ranked.slice(0, 5);
     for (const m of top) {
       let satKey: string | null = null;
       try {

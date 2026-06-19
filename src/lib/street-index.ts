@@ -45,7 +45,10 @@ export function loadStreetIndex(slug: string): StreetIndex | null {
   const file = path.join(INDEX_DIR, `${slug}.json`);
   if (!fs.existsSync(file)) return null;
   try {
-    return JSON.parse(fs.readFileSync(file, "utf-8")) as StreetIndex;
+    const data = JSON.parse(fs.readFileSync(file, "utf-8"));
+    // Reject anything that isn't an actual index (e.g. a .status.json file).
+    if (!data || !Array.isArray(data.houses) || typeof data.suburb !== "string") return null;
+    return data as StreetIndex;
   } catch {
     return null;
   }
@@ -55,7 +58,7 @@ export function listStreetIndexes(): StreetIndex[] {
   if (!fs.existsSync(INDEX_DIR)) return [];
   return fs
     .readdirSync(INDEX_DIR)
-    .filter((f) => f.endsWith(".json"))
+    .filter((f) => f.endsWith(".json") && !f.endsWith(".status.json"))
     .map((f) => loadStreetIndex(f.replace(/\.json$/, "")))
     .filter((x): x is StreetIndex => x !== null);
 }
@@ -210,15 +213,27 @@ export async function matchListingToIndexes(
           ...facadeRefs.map((_, i) => `Listing photo ${i + 1}:`),
           `Street View of ${house.address}${house.svDate ? ` (${house.svDate})` : ""}:`,
         ],
-        prompt: `The first images are listing photos of a house's street facade. The LAST image is Google Street View of a specific address.
+        prompt: `The first image(s) are listing photos of ONE house's street frontage. The LAST image is Google Street View of a candidate address. Decide if they are the SAME house.
 
-Is the Street View the SAME house as the listing photos? Weigh PERMANENT structure heavily (roof shape/material, garage count/position, gate and boundary-wall design, window pattern, wall material, storeys, distinctive objects). Weigh lightly: paint, garden, cars, weather, image age.
+Go feature by feature and compare every visible attribute:
+- STOREYS: single vs double storey. This is a HARD discriminator — a single-storey house can never match a double-storey one.
+- ROOF: type (tile/sheet/flat), colour, shape (hipped/gable), and any fascia/gutter colour.
+- WALLS: material (face brick/plaster), colour.
+- BOUNDARY: wall vs palisade vs combination; its colour; infill (solid/slatted/spear-top/horizontal bar); whether it has a brick base wall or sits low at ground level.
+- GATE: style, colour, material, sliding vs swing.
+- GARAGE/CARPORT: count, position, colour.
+- WINDOWS: arrangement, burglar bars.
+- DRIVEWAY/PAVEMENT: paving material and pattern.
+- GARDEN: distinctive plants (palms, cycads), large trees and their position.
+- DISTINCTIVE: postbox, wall cross, decorative discs, pergola/gazebo, balcony, dormer/clerestory, house number.
 
-Score 0-100: 0-20 clearly different; 21-45 unlikely; 46-65 possible; 66-85 likely same; 86-100 definitely same.
+Street View may be a few years older than the listing: paint and plants can change, but STRUCTURE (storeys, roof shape, boundary type, garage position, window layout) does not. If storeys differ, score <=20 regardless of other similarities.
+
+Score 0-100: 0-20 clearly different (incl. storey mismatch); 21-45 unlikely; 46-65 possible; 66-85 likely same; 86-100 definitely same.
 
 Respond ONLY with JSON:
-{"score": number, "reasoning": "1-2 sentences", "matchingFeatures": ["..."], "differences": ["..."]}`,
-        maxTokens: 500,
+{"score": number, "reasoning": "what is decisive", "matchingFeatures": ["..."], "differences": ["..."]}`,
+        maxTokens: 600,
       });
 
       return {
@@ -235,4 +250,71 @@ Respond ONLY with JSON:
   return results
     .filter((r): r is StreetMatch => r !== null)
     .sort((a, b) => b.score - a.score);
+}
+
+const LETTERS = "ABCDEFGHIJ";
+
+export interface AdjudicatedMatch extends StreetMatch {
+  rank: number;
+}
+
+/**
+ * Head-to-head adjudication: show the listing photos and the top candidates'
+ * Street View images together and force a single calibrated ranking. This
+ * breaks the ties a per-house score produces and lets the model pick the one
+ * best fit rather than scoring each in isolation.
+ */
+export async function adjudicateStreetMatches(
+  matches: StreetMatch[],
+  listing: ListingData,
+  fingerprint: PropertyFingerprint
+): Promise<AdjudicatedMatch[]> {
+  const top = matches.slice(0, 6);
+  if (top.length <= 1) return top.map((m, i) => ({ ...m, rank: i + 1 }));
+
+  const idx = (fingerprint.facade?.bestPhotoIndexes ?? [])
+    .filter((i) => i >= 1 && i <= listing.photoUrls.length)
+    .slice(0, 3);
+  const facadeRefs = idx.length ? idx.map((i) => listing.photoUrls[i - 1]) : listing.photoUrls.slice(0, 3);
+
+  const images: ImageInput[] = [];
+  const labels: string[] = [];
+  facadeRefs.forEach((u, i) => { labels.push(`Listing photo ${i + 1}:`); images.push(listingImage(u)); });
+  top.forEach((m, i) => {
+    const file = path.join(process.cwd(), ".cache", "maps", `${m.house.svKey}.jpg`);
+    if (fs.existsSync(file)) {
+      labels.push(`Candidate ${LETTERS[i]} — ${m.house.address}:`);
+      images.push(base64Image(fs.readFileSync(file).toString("base64"), "image/jpeg"));
+    }
+  });
+
+  const reply = await visionJson<{ ranking: { candidate: string; confidence: number; verdict: string }[] }>({
+    model: MODELS.adjudicate,
+    images,
+    labels,
+    prompt: `The first image(s) are listing photos of ONE house. The remaining images are Street View of candidate addresses (A, B, C…) on the same street.
+
+Identify which candidate, if any, is the SAME house as the listing. Compare storeys (hard discriminator), roof shape/colour, boundary wall/fence type+colour, gate, garage position, window layout, driveway, distinctive features. Street View may predate the listing (paint/plants change; structure does not).
+
+Rank ALL candidates best to worst with a calibrated confidence 0-100 each:
+- 85+ certain same house; 65-84 strong; 40-64 plausible; <40 weak/contradicted (use <20 if storeys differ).
+If none is a real match, every confidence should be low and say so.
+
+Respond ONLY with JSON:
+{"ranking": [{"candidate": "A", "confidence": number, "verdict": "decisive evidence"}]}`,
+    maxTokens: 1500,
+  });
+
+  const byLetter = new Map(top.map((m, i) => [LETTERS[i], m]));
+  const out: AdjudicatedMatch[] = [];
+  let rank = 1;
+  for (const r of reply.ranking ?? []) {
+    const m = byLetter.get((r.candidate || "").trim().toUpperCase());
+    if (!m) continue;
+    out.push({ ...m, score: Math.max(0, Math.min(100, r.confidence ?? m.score)), reasoning: r.verdict || m.reasoning, rank: rank++ });
+    byLetter.delete((r.candidate || "").trim().toUpperCase());
+  }
+  // Append any not mentioned, lowest.
+  for (const [, m] of byLetter) out.push({ ...m, rank: rank++ });
+  return out;
 }
